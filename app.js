@@ -22,15 +22,21 @@ const storageKeys = {
   history: "winspot24.history.v2",
   walletConnected: "winspot24.walletConnected.v2",
   round: "winspot24.round.v2",
+  theme: "winspot24.theme.v1",
 };
 
 const ui = {
   heroTitle: document.getElementById("heroTitle"),
   heroNote: document.getElementById("heroNote"),
+  soldPercent: document.getElementById("soldPercent"),
+  roundStatus: document.getElementById("roundStatus"),
+  themeToggle: document.getElementById("themeToggle"),
   ticketCountInput: document.getElementById("ticketCount"),
   purchaseForm: document.getElementById("purchaseForm"),
   purchaseButton: document.getElementById("purchaseButton"),
+  qtyChips: Array.from(document.querySelectorAll(".qty-chip")),
   purchaseHint: document.getElementById("purchaseHint"),
+  buyChance: document.getElementById("buyChance"),
   remainingInline: document.getElementById("remainingInline"),
   ticketPrice: document.getElementById("ticketPrice"),
   ticketCurrency: document.getElementById("ticketCurrency"),
@@ -152,9 +158,11 @@ const state = {
   history: normalizeHistory(readStorage(storageKeys.history, [])),
   walletConnected: readStorage(storageKeys.walletConnected, false) === true,
   round: 1,
+  theme: "light",
 };
 
 state.round = normalizeRound(readStorage(storageKeys.round, 1), state.history);
+state.theme = resolveInitialTheme();
 
 function soldCount() {
   return state.tickets.length;
@@ -174,6 +182,49 @@ function clampPurchaseCount(value) {
   return Math.min(Math.max(parsed, 1), maxCount);
 }
 
+function currentInputCount() {
+  const remaining = remainingTickets();
+  if (remaining === 0) {
+    return 0;
+  }
+  const requested = clampPurchaseCount(Number(ui.ticketCountInput.value));
+  return Math.min(requested, remaining);
+}
+
+function chancePercent(ticketCount) {
+  if (ticketCount <= 0 || config.totalTickets <= 0) {
+    return 0;
+  }
+  return (ticketCount / config.totalTickets) * 100;
+}
+
+function resolveInitialTheme() {
+  const savedTheme = readStorage(storageKeys.theme, null);
+  if (savedTheme === "dark" || savedTheme === "light") {
+    return savedTheme;
+  }
+
+  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", state.theme);
+  if (ui.themeToggle) {
+    ui.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
+  }
+}
+
+function updateQtyChips() {
+  const selected = Number(ui.ticketCountInput.value);
+  ui.qtyChips.forEach((chip) => {
+    const chipQty = Number(chip.dataset.qty);
+    chip.classList.toggle("active", chipQty === selected);
+  });
+}
+
 function createTicket(serial) {
   return {
     id: formatTicketId(serial),
@@ -187,6 +238,7 @@ function persistState() {
   writeStorage(storageKeys.history, state.history);
   writeStorage(storageKeys.walletConnected, state.walletConnected);
   writeStorage(storageKeys.round, state.round);
+  writeStorage(storageKeys.theme, state.theme);
 }
 
 function renderDrawResult(message, mode = "default") {
@@ -228,6 +280,7 @@ function renderOverview() {
   ui.poolValue.textContent = formatUSD(poolValue());
   ui.progressText.textContent = `Продано ${sold} из ${config.totalTickets} билетов`;
   ui.progressFill.style.width = `${Math.min(progress, 100)}%`;
+  ui.soldPercent.textContent = `${Math.round(progress)}%`;
   ui.roundLabel.textContent = `Раунд #${state.round}`;
 }
 
@@ -235,13 +288,18 @@ function renderPurchaseHint() {
   const remaining = remainingTickets();
   if (remaining === 0) {
     ui.purchaseHint.textContent = "Билеты распроданы. Запусти розыгрыш.";
+    ui.buyChance.textContent = "~0%";
+    updateQtyChips();
     return;
   }
 
-  const requestedCount = clampPurchaseCount(Number(ui.ticketCountInput.value));
-  const effectiveCount = Math.min(requestedCount, remaining);
+  const effectiveCount = currentInputCount();
+  const chance = chancePercent(effectiveCount);
+
   ui.ticketCountInput.value = String(effectiveCount);
   ui.purchaseHint.textContent = `Итог: ${formatUSD(effectiveCount * config.ticketPrice)} ${config.tokenSymbol}`;
+  ui.buyChance.textContent = `~${chance.toFixed(chance < 10 ? 1 : 0)}%`;
+  updateQtyChips();
 }
 
 function renderTicketList() {
@@ -299,9 +357,24 @@ function renderControls() {
   ui.purchaseButton.disabled = soldOut;
   ui.ticketCountInput.disabled = soldOut;
   ui.drawButton.disabled = !soldOut;
+  ui.qtyChips.forEach((chip) => {
+    chip.disabled = soldOut;
+  });
+
   ui.drawRule.textContent = soldOut
     ? `Все ${config.totalTickets} билетов проданы. Можно запускать розыгрыш ${config.prizeName}.`
     : `Розыгрыш доступен после продажи ${config.totalTickets}/${config.totalTickets} билетов.`;
+
+  if (soldOut) {
+    ui.roundStatus.textContent = "Раунд закрыт";
+    ui.roundStatus.classList.add("soldout");
+  } else if (config.walletRequired && !state.walletConnected) {
+    ui.roundStatus.textContent = "Нужен кошелек";
+    ui.roundStatus.classList.remove("soldout");
+  } else {
+    ui.roundStatus.textContent = "Раунд открыт";
+    ui.roundStatus.classList.remove("soldout");
+  }
 }
 
 function renderAll() {
@@ -326,9 +399,10 @@ function buyTickets(event) {
     return;
   }
 
-  const requestedCount = clampPurchaseCount(Number(ui.ticketCountInput.value));
-  const ticketCount = Math.min(requestedCount, remaining);
+  const ticketCount = currentInputCount();
   const firstSerial = soldCount() + 1;
+  const firstId = formatTicketId(firstSerial);
+  const lastId = formatTicketId(firstSerial + ticketCount - 1);
 
   for (let index = 0; index < ticketCount; index += 1) {
     state.tickets.push(createTicket(firstSerial + index));
@@ -340,12 +414,12 @@ function buyTickets(event) {
   const remainingAfterPurchase = remainingTickets();
   if (remainingAfterPurchase === 0) {
     renderDrawResult(
-      `Куплено ${ticketCount} билетов. Sold out: ${config.totalTickets}/${config.totalTickets}. Теперь можно запускать розыгрыш.`,
+      `Куплено ${ticketCount} билетов (${firstId}–${lastId}). Sold out ${config.totalTickets}/${config.totalTickets}. Можно запускать розыгрыш.`,
       "alert"
     );
   } else {
     renderDrawResult(
-      `Куплено ${ticketCount} билетов на сумму ${formatUSD(ticketCount * config.ticketPrice)} ${config.tokenSymbol}. Осталось ${remainingAfterPurchase}.`,
+      `Покупка подтверждена: ${ticketCount} билетов (${firstId}–${lastId}) на сумму ${formatUSD(ticketCount * config.ticketPrice)} ${config.tokenSymbol}. Осталось ${remainingAfterPurchase}.`,
       "default"
     );
   }
@@ -388,17 +462,34 @@ function toggleWallet() {
   state.walletConnected = !state.walletConnected;
   persistState();
   renderWallet();
+  renderControls();
 
   if (state.walletConnected) {
     renderDrawResult("Wallet подключен. Можно покупать билеты за USDT (ERC-20).", "alert");
+  } else {
+    renderDrawResult("Wallet отключен. Для покупки билетов подключи кошелек.", "alert");
   }
+}
+
+function toggleTheme() {
+  state.theme = state.theme === "dark" ? "light" : "dark";
+  persistState();
+  applyTheme();
 }
 
 ui.ticketCountInput.addEventListener("input", renderPurchaseHint);
 ui.purchaseForm.addEventListener("submit", buyTickets);
 ui.drawButton.addEventListener("click", runDraw);
 ui.walletButton.addEventListener("click", toggleWallet);
+ui.themeToggle?.addEventListener("click", toggleTheme);
+ui.qtyChips.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    ui.ticketCountInput.value = chip.dataset.qty || "1";
+    renderPurchaseHint();
+  });
+});
 
+applyTheme();
 renderConfig();
 renderWallet();
 renderAll();
