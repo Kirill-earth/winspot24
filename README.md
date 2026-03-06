@@ -95,7 +95,7 @@ GitHub Pages не исполняет API, поэтому backend нужно по
 
 Repository Variables:
 - `VPS_HOST` — IP сервера.
-- `VPS_USER` — SSH user (например, `root` или `ubuntu`).
+- `VPS_USER` — SSH user (можно не задавать, по умолчанию `root`).
 - `VPS_PORT` — обычно `22` (можно не задавать).
 - `VPS_PATH` — путь деплоя, например `/opt/winspot24-api` (можно не задавать).
 - `API_DOMAIN` — `api.winspot24.com` (можно не задавать).
