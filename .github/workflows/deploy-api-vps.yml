@@ -72,23 +72,18 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      - name: Add host key
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${VPS_PORT}" -H "${VPS_HOST}" >> ~/.ssh/known_hosts
-
       - name: Upload backend files
         run: |
           set -euo pipefail
-          rsync -az --delete -e "ssh -p ${VPS_PORT}" \
+          RSYNC_SSH="ssh -p ${VPS_PORT} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+          rsync -az --delete -e "${RSYNC_SSH}" \
             backend deploy/api \
             "${VPS_USER}@${VPS_HOST}:${VPS_PATH}/"
 
       - name: Deploy on VPS
         run: |
           set -euo pipefail
-          ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "VPS_PATH='${VPS_PATH}' bash -s" <<'EOF'
+          ssh -p "${VPS_PORT}" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "${VPS_USER}@${VPS_HOST}" "VPS_PATH='${VPS_PATH}' bash -s" <<'EOF'
           set -euo pipefail
           if [[ "$(id -u)" -eq 0 ]]; then
             SUDO=""
