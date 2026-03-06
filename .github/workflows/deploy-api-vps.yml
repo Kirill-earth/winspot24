@@ -1,0 +1,117 @@
+name: Deploy API To VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - deploy/api/**
+      - .github/workflows/deploy-api-vps.yml
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_USER: ${{ vars.VPS_USER }}
+      VPS_PORT: ${{ vars.VPS_PORT }}
+      VPS_PATH: ${{ vars.VPS_PATH }}
+      API_DOMAIN: ${{ vars.API_DOMAIN }}
+      ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+      ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required configuration
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Missing repository variable VPS_HOST}"
+          : "${VPS_USER:?Missing repository variable VPS_USER}"
+          : "${ACME_EMAIL:?Missing repository variable ACME_EMAIL}"
+          : "${ETH_RPC_URL:?Missing repository secret ETH_RPC_URL}"
+
+          if [[ -z "${VPS_PORT}" ]]; then
+            echo "VPS_PORT=22" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${VPS_PATH}" ]]; then
+            echo "VPS_PATH=/opt/winspot24-api" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${API_DOMAIN}" ]]; then
+            echo "API_DOMAIN=api.winspot24.com" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prepare API env file
+        run: |
+          set -euo pipefail
+          mkdir -p deploy/api
+          cat > deploy/api/.env <<EOF
+          ETH_RPC_URL=${ETH_RPC_URL}
+          CHAIN_ID=1
+          USDT_CONTRACT_ADDRESS=0xdAC17F958D2ee523a2206206994597C13D831ec7
+          TREASURY_ADDRESS=0xC5AbC4ffE1d53d480dcadcdc4d2ccb66Fe96C47a
+          TOTAL_TICKETS=100
+          MAX_TICKETS_PER_PURCHASE=20
+          TICKET_PRICE_USDT=10
+          SOLD_OUT_DELAY_BLOCKS=5
+          SHIPPING_START_DATE=2026-03-11
+          CORS_ORIGINS=https://winspot24.com,https://www.winspot24.com
+          DB_PATH=/app/data/winspot24.db
+          API_DOMAIN=${API_DOMAIN}
+          ACME_EMAIL=${ACME_EMAIL}
+          EOF
+
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Add host key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${VPS_PORT}" -H "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Upload backend files
+        run: |
+          set -euo pipefail
+          rsync -az --delete -e "ssh -p ${VPS_PORT}" \
+            backend deploy/api \
+            "${VPS_USER}@${VPS_HOST}:${VPS_PATH}/"
+
+      - name: Deploy on VPS
+        run: |
+          set -euo pipefail
+          ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "VPS_PATH='${VPS_PATH}' bash -s" <<'EOF'
+          set -euo pipefail
+          if [[ "$(id -u)" -eq 0 ]]; then
+            SUDO=""
+          else
+            if ! command -v sudo >/dev/null 2>&1; then
+              echo "User is not root and sudo is not installed." >&2
+              exit 1
+            fi
+            SUDO="sudo"
+          fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              $SUDO apt-get update
+              $SUDO apt-get install -y docker.io docker-compose-plugin
+            else
+              echo "Docker is missing and automatic install supports apt-get only." >&2
+              exit 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            $SUDO systemctl enable --now docker || true
+          fi
+
+          cd "${VPS_PATH}/deploy/api"
+          mkdir -p ../../backend/data
+          $SUDO docker compose up -d --build --remove-orphans
+          $SUDO docker compose ps
+          EOF
