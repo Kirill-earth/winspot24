@@ -81,6 +81,32 @@ GitHub Pages не исполняет API, поэтому backend нужно по
 2. `api.winspot24.com` -> backend.
 3. В `config.js` указать `apiBaseUrl: "https://api.winspot24.com/api/v1"`.
 
+### Backend через GitHub Actions (автодеплой на VPS)
+
+В репозитории добавлен workflow:
+- `.github/workflows/deploy-api-vps.yml`
+
+Он запускается при пуше в `main` (когда меняется `backend/**` или `deploy/api/**`) и делает:
+1. Заливает `backend` и `deploy/api` на сервер.
+2. Поднимает `api + caddy` через Docker Compose.
+3. Выпускает/обновляет TLS сертификат для `api.winspot24.com`.
+
+Нужно заполнить в GitHub (`Settings -> Secrets and variables -> Actions`):
+
+Repository Variables:
+- `VPS_HOST` — IP сервера.
+- `VPS_USER` — SSH user (например, `root` или `ubuntu`).
+- `VPS_PORT` — обычно `22` (можно не задавать).
+- `VPS_PATH` — путь деплоя, например `/opt/winspot24-api` (можно не задавать).
+- `API_DOMAIN` — `api.winspot24.com` (можно не задавать).
+- `ACME_EMAIL` — email для Let's Encrypt.
+
+Repository Secrets:
+- `VPS_SSH_KEY` — приватный SSH-ключ для входа на сервер.
+- `ETH_RPC_URL` — RPC URL Ethereum Mainnet.
+
+После этого любой push в `main` с изменениями backend автоматически задеплоит API.
+
 ## Ограничения и риски
 
 - Это не лицензированная gambling-платформа из коробки.
