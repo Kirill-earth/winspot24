@@ -29,7 +29,6 @@ jobs:
         run: |
           set -euo pipefail
           : "${VPS_HOST:?Missing repository variable VPS_HOST}"
-          : "${VPS_USER:?Missing repository variable VPS_USER}"
           : "${ETH_RPC_URL:?Missing repository secret ETH_RPC_URL}"
 
           if [[ -z "${VPS_PORT}" ]]; then
@@ -37,6 +36,9 @@ jobs:
           fi
           if [[ -z "${VPS_PATH}" ]]; then
             echo "VPS_PATH=/opt/winspot24-api" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${VPS_USER}" ]]; then
+            echo "VPS_USER=root" >> "$GITHUB_ENV"
           fi
           if [[ -z "${API_DOMAIN}" ]]; then
             echo "API_DOMAIN=api.winspot24.com" >> "$GITHUB_ENV"
