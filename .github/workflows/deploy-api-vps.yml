@@ -30,7 +30,6 @@ jobs:
           set -euo pipefail
           : "${VPS_HOST:?Missing repository variable VPS_HOST}"
           : "${VPS_USER:?Missing repository variable VPS_USER}"
-          : "${ACME_EMAIL:?Missing repository variable ACME_EMAIL}"
           : "${ETH_RPC_URL:?Missing repository secret ETH_RPC_URL}"
 
           if [[ -z "${VPS_PORT}" ]]; then
@@ -41,6 +40,9 @@ jobs:
           fi
           if [[ -z "${API_DOMAIN}" ]]; then
             echo "API_DOMAIN=api.winspot24.com" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${ACME_EMAIL}" ]]; then
+            echo "ACME_EMAIL=admin@winspot24.com" >> "$GITHUB_ENV"
           fi
 
       - name: Prepare API env file
