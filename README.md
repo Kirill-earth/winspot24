@@ -99,7 +99,7 @@ Repository Variables:
 - `VPS_PORT` — обычно `22` (можно не задавать).
 - `VPS_PATH` — путь деплоя, например `/opt/winspot24-api` (можно не задавать).
 - `API_DOMAIN` — `api.winspot24.com` (можно не задавать).
-- `ACME_EMAIL` — email для Let's Encrypt.
+- `ACME_EMAIL` — email для Let's Encrypt (можно не задавать, по умолчанию `admin@winspot24.com`).
 
 Repository Secrets:
 - `VPS_SSH_KEY` — приватный SSH-ключ для входа на сервер.
