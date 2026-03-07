@@ -8,12 +8,6 @@
       name="description"
       content="Winspot24: розыгрыш нового MacBook Neo. 100 билетов по 10 USDT (ERC-20)."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -25,12 +19,6 @@
         <span class="logo-orb" aria-hidden="true"></span>
         <span class="logo-text">winspot24</span>
       </a>
-      <nav class="main-nav" aria-label="Главная навигация">
-        <a href="#round" data-i18n="nav_round">Раунд</a>
-        <a href="#how-it-works" data-i18n="nav_how">Как это работает</a>
-        <a href="#apple-assets">Apple materials</a>
-        <a href="#trust" data-i18n="nav_trust">Прозрачность</a>
-      </nav>
       <div class="header-actions">
         <span id="roundStatus" class="status-pill" data-i18n="status_open">Раунд открыт</span>
         <select id="languageSelect" class="language-select" aria-label="Language"></select>
@@ -41,46 +29,42 @@
 
     <main class="site-main">
       <section class="hero reveal">
-        <div class="hero-content">
-          <p class="eyebrow">WINSPOT24 SIGNATURE ROUND · USDT ERC-20</p>
-          <h1 id="heroTitle" data-i18n="hero_title">Розыгрыш: Новый MacBook Neo</h1>
-          <p class="hero-subtitle" data-i18n="hero_subtitle">
-            Премиальный раунд в эстетике Apple: <strong>100 билетов</strong> по
-            <strong>$10 USDT</strong>. После sold-out выбирается <strong>1 победитель</strong>.
+        <div class="hero-copy">
+          <p class="eyebrow">WINSPOT24 · USDT ERC-20</p>
+          <h1 id="heroTitle" data-i18n="hero_title">Новый MacBook Neo</h1>
+          <p class="hero-subtitle">
+            Всего <strong>100 билетов</strong> по <strong>$10 USDT</strong>. После sold-out
+            система выбирает <strong>1 победителя</strong>. Отправка приза стартует с
+            <strong>11 марта 2026</strong> из Дубая.
           </p>
           <p class="hero-note" id="heroNote">100 билетов · $10 · Приз: MacBook Neo</p>
 
-          <div class="hero-metrics">
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_price">Цена билета</p>
-              <p class="metric-value"><span id="ticketPrice">$10</span> <span id="ticketCurrency">USDT</span></p>
+          <div class="hero-stats">
+            <article class="stat-card">
+              <span class="stat-label" data-i18n="metric_price">Цена билета</span>
+              <strong class="stat-value"><span id="ticketPrice">$10</span> <span id="ticketCurrency">USDT</span></strong>
             </article>
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_sold">Продано</p>
-              <p class="metric-value"><span id="ticketsSold">0</span> / <span id="ticketsTotal">100</span></p>
+            <article class="stat-card">
+              <span class="stat-label" data-i18n="metric_sold">Продано</span>
+              <strong class="stat-value"><span id="ticketsSold">0</span> / <span id="ticketsTotal">100</span></strong>
             </article>
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_left">Осталось</p>
-              <p class="metric-value"><span id="ticketsRemaining">100</span></p>
+            <article class="stat-card">
+              <span class="stat-label" data-i18n="metric_left">Осталось</span>
+              <strong class="stat-value"><span id="ticketsRemaining">100</span></strong>
             </article>
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_pool">Призовой пул</p>
-              <p class="metric-value"><span id="poolValue">$0</span> USDT</p>
-            </article>
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_round_close">Закрытие раунда</p>
-              <p class="metric-value"><span id="soldPercent">0%</span></p>
-            </article>
-            <article class="metric">
-              <p class="metric-label" data-i18n="metric_round">Текущий раунд</p>
-              <p class="metric-value" id="roundLabel">Раунд #1</p>
+            <article class="stat-card">
+              <span class="stat-label" data-i18n="metric_pool">Пул</span>
+              <strong class="stat-value"><span id="poolValue">$0</span> USDT</strong>
             </article>
           </div>
 
           <div class="progress-block">
             <div class="progress-header">
               <span id="progressText">Продано 0 из 100 билетов</span>
-              <span data-i18n="limited_batch">Лимитированный тираж</span>
+              <span class="progress-meta">
+                <strong id="roundLabel">Раунд #1</strong>
+                <span id="soldPercent">0%</span>
+              </span>
             </div>
             <div class="progress-track">
               <div id="progressFill" class="progress-fill"></div>
@@ -88,134 +72,51 @@
           </div>
         </div>
 
-        <aside class="prize-stage">
+        <aside class="hero-media">
           <figure class="official-material">
             <img
-              src="https://www.apple.com/newsroom/images/2026/03/apple-introduces-the-new-macbook-air-with-m5/article/Apple-MacBook-Air-hero-260303_big.jpg.large.jpg"
-              alt="Apple MacBook Air M5 official hero visual"
-              loading="lazy"
+              src="https://www.apple.com/v/macbook-neo/a/images/overview/welcome/hero_endframe__c62q483im5si_large.jpg"
+              alt="Official Apple MacBook Neo image"
+              loading="eager"
             />
           </figure>
           <p class="material-credit">
-            Official Apple visual · Source:
-            <a
-              href="https://www.apple.com/newsroom/2026/03/apple-introduces-the-new-macbook-air-with-m5/"
-              target="_blank"
-              rel="noopener"
-              >Apple Newsroom (March 3, 2026)</a
+            Official Apple material · Source:
+            <a href="https://www.apple.com/macbook-neo/" target="_blank" rel="noopener"
+              >apple.com/macbook-neo</a
             >
           </p>
-          <div class="stage-facts">
-            <div class="fact">
-              <span class="fact-label" data-i18n="fact_entry">Вход</span>
-              <strong>$10 USDT</strong>
-            </div>
-            <div class="fact">
-              <span class="fact-label" data-i18n="fact_mechanic">Механика</span>
-              <strong>100 билетов</strong>
-            </div>
-            <div class="fact">
-              <span class="fact-label" data-i18n="fact_result">Итог</span>
-              <strong>1 победитель</strong>
-            </div>
-          </div>
         </aside>
       </section>
 
-      <section class="apple-assets reveal" id="apple-assets">
-        <div class="apple-assets-head">
-          <p class="eyebrow">OFFICIAL APPLE MATERIALS</p>
-          <h2>Реальные промо-материалы нового MacBook c apple.com</h2>
-          <p>
-            Добавили официальный рекламный контент из Apple Newsroom, чтобы сайт выглядел
-            максимально премиально и честно по источникам.
-          </p>
-        </div>
-        <div class="apple-assets-grid">
-          <article class="apple-asset-card">
-            <img
-              class="apple-asset-media"
-              src="https://www.apple.com/newsroom/images/2026/03/apple-introduces-the-new-macbook-air-with-m5/article/Apple-MacBook-Air-hero-260303_big.jpg.large.jpg"
-              alt="Apple MacBook Air M5 hero image"
-              loading="lazy"
-            />
-            <div class="apple-asset-body">
-              <p class="asset-badge">Apple Newsroom</p>
-              <h3>MacBook Air with M5 — Hero</h3>
-              <a
-                class="asset-link"
-                href="https://www.apple.com/newsroom/2026/03/apple-introduces-the-new-macbook-air-with-m5/"
-                target="_blank"
-                rel="noopener"
-                >Открыть источник</a
-              >
-            </div>
-          </article>
-
-          <article class="apple-asset-card">
-            <img
-              class="apple-asset-media"
-              src="https://www.apple.com/newsroom/images/2026/03/apple-introduces-the-new-macbook-air-with-m5/article/Apple-MacBook-Air-Liquid-Retina-display-260303_big.jpg.large.jpg"
-              alt="Apple MacBook Air Liquid Retina display visual"
-              loading="lazy"
-            />
-            <div class="apple-asset-body">
-              <p class="asset-badge">Apple Newsroom</p>
-              <h3>Liquid Retina Display Visual</h3>
-              <a
-                class="asset-link"
-                href="https://www.apple.com/newsroom/2026/03/apple-introduces-the-new-macbook-air-with-m5/"
-                target="_blank"
-                rel="noopener"
-                >Открыть источник</a
-              >
-            </div>
-          </article>
-
-          <article class="apple-asset-card">
-            <img
-              class="apple-asset-media"
-              src="https://www.apple.com/newsroom/images/2026/03/apple-introduces-the-new-macbook-air-with-m5/article/Apple-MacBook-Air-13-inch-and-15-inch-260303_big.jpg.large.jpg"
-              alt="Apple MacBook Air 13-inch and 15-inch side profile"
-              loading="lazy"
-            />
-            <div class="apple-asset-body">
-              <p class="asset-badge">Apple Newsroom</p>
-              <h3>13-inch and 15-inch Profile</h3>
-              <a
-                class="asset-link"
-                href="https://www.apple.com/newsroom/2026/03/apple-introduces-the-new-macbook-air-with-m5/"
-                target="_blank"
-                rel="noopener"
-                >Открыть источник</a
-              >
-            </div>
-          </article>
-        </div>
-      </section>
-
       <section class="control-grid reveal" id="round">
-        <article class="card purchase-card">
+        <article class="panel purchase-panel">
           <h2 data-i18n="purchase_title">Покупка билетов</h2>
-          <p class="card-copy" data-i18n="purchase_copy">
-            Оплата в <strong>USDT (ERC-20)</strong>. Каждый билет получает уникальный номер от
-            <strong>#001</strong> до <strong>#100</strong>.
+          <p class="panel-copy">
+            Выбери количество, подключи кошелек и оплати в <strong>USDT ERC-20</strong>.
+            Номера билетов назначаются автоматически.
           </p>
+
           <form id="purchaseForm" class="purchase-form">
             <label for="ticketCount" data-i18n="tickets_count">Количество билетов</label>
             <div class="control-row">
               <input id="ticketCount" name="ticketCount" type="number" min="1" max="20" value="1" />
-              <button id="purchaseButton" class="primary-button" type="submit" data-i18n="buy_button">Купить билеты</button>
+              <button id="purchaseButton" class="primary-button" type="submit" data-i18n="buy_button">
+                Купить билеты
+              </button>
             </div>
-            <div class="quick-qty">
+
+            <div class="quick-qty" aria-label="Quick quantity">
               <button type="button" class="qty-chip active" data-qty="1">1</button>
               <button type="button" class="qty-chip" data-qty="3">3</button>
               <button type="button" class="qty-chip" data-qty="5">5</button>
               <button type="button" class="qty-chip" data-qty="10">10</button>
             </div>
+
             <p class="hint" id="purchaseHint">Итог: $10 USDT</p>
             <p class="hint secondary">Шанс при этой покупке: <span id="buyChance">~1%</span></p>
             <p class="hint secondary">Осталось билетов: <span id="remainingInline">100</span></p>
+
             <div class="shipping-form">
               <p class="shipping-title" data-i18n="shipping_title">Адрес доставки (для победителя)</p>
               <div class="shipping-grid">
@@ -237,106 +138,107 @@
                 </label>
                 <label class="field-label full">
                   <span data-i18n="ship_line1">Адрес, строка 1</span>
-                  <input id="shippingAddressLine1" name="shippingAddressLine1" type="text" autocomplete="address-line1" required />
+                  <input
+                    id="shippingAddressLine1"
+                    name="shippingAddressLine1"
+                    type="text"
+                    autocomplete="address-line1"
+                    required
+                  />
                 </label>
                 <label class="field-label full">
                   <span data-i18n="ship_line2">Адрес, строка 2 (необязательно)</span>
-                  <input id="shippingAddressLine2" name="shippingAddressLine2" type="text" autocomplete="address-line2" />
+                  <input
+                    id="shippingAddressLine2"
+                    name="shippingAddressLine2"
+                    type="text"
+                    autocomplete="address-line2"
+                  />
                 </label>
                 <label class="field-label">
                   <span data-i18n="ship_postal">Почтовый индекс</span>
-                  <input id="shippingPostalCode" name="shippingPostalCode" type="text" autocomplete="postal-code" />
+                  <input
+                    id="shippingPostalCode"
+                    name="shippingPostalCode"
+                    type="text"
+                    autocomplete="postal-code"
+                  />
                 </label>
               </div>
-              <p class="hint secondary" data-i18n="shipping_notice">
-                Отправка приза стартует с 11 марта 2026 из Дубая.
-              </p>
+              <p class="hint secondary">Отправка приза стартует с 11 марта 2026 из Дубая.</p>
               <p class="hint secondary" id="lastTxHash"></p>
             </div>
           </form>
-          <div id="ticketList" class="ticket-list empty">Покупок пока нет.</div>
+
+          <div class="status-section">
+            <h3>Ваши билеты</h3>
+            <div id="ticketList" class="ticket-list empty">Ваших билетов пока нет.</div>
+          </div>
         </article>
 
-        <article class="card draw-card">
-          <h2 data-i18n="draw_title">Розыгрыш приза</h2>
-          <p class="card-copy" id="drawRule">Розыгрыш доступен только после продажи 100/100 билетов.</p>
-          <button id="drawButton" class="primary-button" type="button" data-i18n="draw_button">Провести розыгрыш</button>
+        <article class="panel status-panel">
+          <div class="panel-head">
+            <div>
+              <h2 data-i18n="draw_title">Розыгрыш приза</h2>
+              <p class="panel-copy" id="drawRule">Розыгрыш доступен только после продажи 100/100 билетов.</p>
+            </div>
+            <button id="drawButton" class="primary-button" type="button" data-i18n="draw_button">
+              Провести розыгрыш
+            </button>
+          </div>
+
           <div id="drawResult" class="draw-result">
             <p>Ожидаем продажи всех билетов.</p>
           </div>
-          <h3 data-i18n="history_title">История раундов</h3>
-          <div id="historyList" class="history-list empty">История пуста.</div>
-          <h3 data-i18n="delivery_title">Публичная доставка из Дубая</h3>
-          <div class="delivery-progress">
-            <div class="progress-track">
-              <div id="deliveryProgressFill" class="progress-fill"></div>
-            </div>
-            <p id="deliveryProgressText" class="hint secondary">Ожидание розыгрыша и подтверждения победителя.</p>
+
+          <div class="status-meta">
+            <article>
+              <span>Network</span>
+              <strong id="chainName">-</strong>
+            </article>
+            <article>
+              <span>Token</span>
+              <strong id="tokenName">-</strong>
+            </article>
+            <article>
+              <span>Wallet</span>
+              <strong id="walletStatus">Disconnected</strong>
+            </article>
+            <article class="visually-hidden">
+              <span>Ledger</span>
+              <strong id="contractAddress">-</strong>
+            </article>
           </div>
-          <div id="deliveryTimeline" class="history-list empty">Шкала доставки появится после розыгрыша.</div>
-        </article>
-      </section>
 
-      <section class="info-grid reveal" id="how-it-works">
-        <article class="info-card">
-          <p class="info-step">01</p>
-          <h3 data-i18n="step_connect_title">Подключение</h3>
-          <p data-i18n="step_connect_copy">Подключи кошелек и проверь сеть перед покупкой билетов в USDT.</p>
-        </article>
-        <article class="info-card">
-          <p class="info-step">02</p>
-          <h3 data-i18n="step_buy_title">Покупка</h3>
-          <p data-i18n="step_buy_copy">Выбери количество билетов. Номера выдаются автоматически по порядку.</p>
-        </article>
-        <article class="info-card">
-          <p class="info-step">03</p>
-          <h3 data-i18n="step_draw_title">Розыгрыш</h3>
-          <p data-i18n="step_draw_copy">После sold-out (100/100) запускается выбор одного победителя раунда.</p>
-        </article>
-      </section>
+          <div class="status-section">
+            <h3 data-i18n="history_title">История раундов</h3>
+            <div id="historyList" class="history-list empty">История пока пуста.</div>
+          </div>
 
-      <section class="card config-card reveal" id="trust">
-        <div class="trust-head">
-          <h2 data-i18n="trust_title">Прозрачность и статус</h2>
-          <p data-i18n="trust_copy">Ключевые параметры раунда и инфраструктуры в одном месте.</p>
-        </div>
-        <div class="config-grid">
-          <article>
-            <p class="config-label" data-i18n="config_network">Сеть</p>
-            <p class="config-value" id="chainName">-</p>
-          </article>
-          <article>
-            <p class="config-label" data-i18n="config_token">Токен</p>
-            <p class="config-value" id="tokenName">-</p>
-          </article>
-          <article>
-            <p class="config-label" data-i18n="config_contract">Контракт</p>
-            <p class="config-value mono" id="contractAddress">-</p>
-          </article>
-          <article>
-            <p class="config-label" data-i18n="config_wallet">Wallet статус</p>
-            <p class="config-value" id="walletStatus">Disconnected</p>
-          </article>
-        </div>
-        <div class="trust-notes">
-          <p data-i18n="trust_note_real">
-            Режим real-money: оплата проверяется on-chain через USDT transfer в treasury-кошелек.
-          </p>
-          <p data-i18n="trust_note_legal">
-            До полноценного продакшн-режима нужно закрыть юридические требования вашей юрисдикции.
-          </p>
-        </div>
-        <div class="legal-links">
-          <a href="./terms.html" target="_blank" rel="noopener" data-i18n="link_terms">Terms</a>
-          <a href="./privacy.html" target="_blank" rel="noopener" data-i18n="link_privacy">Privacy</a>
-          <a href="./refund.html" target="_blank" rel="noopener" data-i18n="link_refund">Refund</a>
-          <a href="./eligibility.html" target="_blank" rel="noopener" data-i18n="link_eligibility">Eligibility</a>
-        </div>
+          <div class="status-section">
+            <h3 data-i18n="delivery_title">Публичная доставка из Дубая</h3>
+            <div class="delivery-progress">
+              <div class="progress-track compact">
+                <div id="deliveryProgressFill" class="progress-fill"></div>
+              </div>
+              <p id="deliveryProgressText" class="hint secondary">
+                Ожидание розыгрыша и подтверждения победителя.
+              </p>
+            </div>
+            <div id="deliveryTimeline" class="history-list empty">Шкала доставки появится после розыгрыша.</div>
+          </div>
+        </article>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>Winspot24 • MacBook Neo Lottery • Professional MVP build · 2026</p>
+      <div class="footer-links">
+        <a href="./terms.html" target="_blank" rel="noopener">Terms</a>
+        <a href="./privacy.html" target="_blank" rel="noopener">Privacy</a>
+        <a href="./refund.html" target="_blank" rel="noopener">Refund</a>
+        <a href="./eligibility.html" target="_blank" rel="noopener">Eligibility</a>
+      </div>
+      <p>Winspot24 · MacBook Neo · Shipping starts March 11, 2026</p>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
