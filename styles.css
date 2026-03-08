@@ -692,6 +692,11 @@ input[type="number"] {
   gap: 10px;
 }
 
+#deliveryProgressText:empty,
+#deliveryTimeline:empty {
+  display: none;
+}
+
 .site-footer {
   max-width: 1120px;
   margin: 0 auto;
