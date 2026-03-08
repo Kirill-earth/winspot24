@@ -983,9 +983,9 @@ function renderDelivery() {
   clearNode(ui.deliveryTimeline);
   if (!state.delivery || !state.delivery.items || !state.delivery.items.length) {
     ui.deliveryTimeline.className = "history-list empty";
-    ui.deliveryTimeline.textContent = message("msg_delivery_wait");
+    ui.deliveryTimeline.textContent = "";
     ui.deliveryProgressFill.style.width = "0%";
-    ui.deliveryProgressText.textContent = message("msg_delivery_wait");
+    ui.deliveryProgressText.textContent = "";
     return;
   }
 
@@ -1250,10 +1250,10 @@ async function bootstrap() {
     mergeBackendConfig(backendConfig);
     await refreshData();
   } catch (error) {
-    setDrawMessage(
-      message("msg_error_prefix", { message: `${message("msg_backend_offline")} (${error.message || "n/a"})` }),
-      "alert"
-    );
+    setDrawMessage(message("msg_backend_offline"), "alert");
+    // Keep technical details in console for debugging instead of showing raw fetch internals to users.
+    // eslint-disable-next-line no-console
+    console.error("Backend bootstrap failed:", error);
     renderAll();
   }
 }
