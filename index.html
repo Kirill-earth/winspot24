@@ -20,7 +20,7 @@
         <span class="logo-text">winspot24</span>
       </a>
       <div class="header-actions">
-        <span id="roundStatus" class="status-pill" data-i18n="status_open">Раунд открыт</span>
+        <span id="roundStatus" class="status-pill visually-hidden" data-i18n="status_open">Раунд открыт</span>
         <select id="languageSelect" class="language-select" aria-label="Language"></select>
         <button id="themeToggle" class="ghost-button theme-button" type="button">Dark Mode</button>
         <button id="walletButton" class="ghost-button" type="button">Connect Wallet</button>
@@ -80,12 +80,6 @@
               loading="eager"
             />
           </figure>
-          <p class="material-credit">
-            Official Apple material · Source:
-            <a href="https://www.apple.com/macbook-neo/" target="_blank" rel="noopener"
-              >apple.com/macbook-neo</a
-            >
-          </p>
         </aside>
       </section>
 
@@ -221,11 +215,9 @@
               <div class="progress-track compact">
                 <div id="deliveryProgressFill" class="progress-fill"></div>
               </div>
-              <p id="deliveryProgressText" class="hint secondary">
-                Ожидание розыгрыша и подтверждения победителя.
-              </p>
+              <p id="deliveryProgressText" class="hint secondary"></p>
             </div>
-            <div id="deliveryTimeline" class="history-list empty">Шкала доставки появится после розыгрыша.</div>
+            <div id="deliveryTimeline" class="history-list empty"></div>
           </div>
         </article>
       </section>
@@ -238,7 +230,6 @@
         <a href="./refund.html" target="_blank" rel="noopener">Refund</a>
         <a href="./eligibility.html" target="_blank" rel="noopener">Eligibility</a>
       </div>
-      <p>Winspot24 · MacBook Neo · Shipping starts March 11, 2026</p>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
