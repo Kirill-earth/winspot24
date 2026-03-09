@@ -20,6 +20,13 @@ jobs:
       VPS_PATH: ${{ vars.VPS_PATH }}
       API_DOMAIN: ${{ vars.API_DOMAIN }}
       ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+      APP_URL: ${{ vars.APP_URL }}
+      SESSION_COOKIE_NAME: ${{ vars.SESSION_COOKIE_NAME }}
+      SESSION_COOKIE_SECURE: ${{ vars.SESSION_COOKIE_SECURE }}
+      SESSION_DAYS: ${{ vars.SESSION_DAYS }}
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      APPLE_SERVICE_ID: ${{ vars.APPLE_SERVICE_ID }}
+      APPLE_REDIRECT_URI: ${{ vars.APPLE_REDIRECT_URI }}
       ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
     steps:
       - name: Checkout repository
@@ -46,6 +53,21 @@ jobs:
           if [[ -z "${ACME_EMAIL}" ]]; then
             echo "ACME_EMAIL=admin@winspot24.com" >> "$GITHUB_ENV"
           fi
+          if [[ -z "${APP_URL}" ]]; then
+            echo "APP_URL=https://winspot24.com" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SESSION_COOKIE_NAME}" ]]; then
+            echo "SESSION_COOKIE_NAME=winspot24_session" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SESSION_COOKIE_SECURE}" ]]; then
+            echo "SESSION_COOKIE_SECURE=true" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SESSION_DAYS}" ]]; then
+            echo "SESSION_DAYS=30" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${APPLE_REDIRECT_URI}" ]]; then
+            echo "APPLE_REDIRECT_URI=https://${API_DOMAIN}/api/v1/auth/apple/callback" >> "$GITHUB_ENV"
+          fi
 
       - name: Prepare API env file
         run: |
@@ -63,6 +85,13 @@ jobs:
           SHIPPING_START_DATE=2026-03-11
           CORS_ORIGINS=https://winspot24.com,https://www.winspot24.com
           DB_PATH=/app/data/winspot24.db
+          APP_URL=${APP_URL}
+          SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME}
+          SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
+          SESSION_DAYS=${SESSION_DAYS}
+          GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+          APPLE_SERVICE_ID=${APPLE_SERVICE_ID}
+          APPLE_REDIRECT_URI=${APPLE_REDIRECT_URI}
           API_DOMAIN=${API_DOMAIN}
           ACME_EMAIL=${ACME_EMAIL}
           EOF

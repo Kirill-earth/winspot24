@@ -1,25 +1,42 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import re
+import secrets
 import sqlite3
+import urllib.parse
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import jwt
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
+from jwt import PyJWKClient
 from pydantic import BaseModel, Field
 
 
 TRANSFER_SELECTOR = "a9059cbb"
 HEX_ADDRESS_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
+GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_ISSUER = "https://appleid.apple.com"
+DEFAULT_SESSION_DAYS = 30
+APPLE_JWK_CLIENT = PyJWKClient(APPLE_JWKS_URL)
+
+
+def utc_now() -> dt.datetime:
+  return dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
 
 
 def utc_now_iso() -> str:
-  return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+  return utc_now().isoformat()
 
 
 def parse_decimal(value: str, fallback: str) -> Decimal:
@@ -29,7 +46,32 @@ def parse_decimal(value: str, fallback: str) -> Decimal:
     return Decimal(fallback)
 
 
+def parse_bool_env(value: str | None, default: bool = False) -> bool:
+  if value is None:
+    return default
+  return value.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def parse_iso_datetime(value: str | None) -> dt.datetime | None:
+  if not value:
+    return None
+  try:
+    return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+  except ValueError:
+    return None
+
+
+APP_URL = os.getenv("APP_URL", "https://winspot24.com").strip().rstrip("/")
+raw_allowed_origins = os.getenv("CORS_ORIGINS", "").strip()
+ALLOWED_ORIGINS = [item.strip() for item in raw_allowed_origins.split(",") if item.strip()] if raw_allowed_origins else [
+  APP_URL,
+  "https://www.winspot24.com",
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+]
+
 APP_ENV = {
+  "app_url": APP_URL,
   "rpc_url": os.getenv("ETH_RPC_URL", "").strip(),
   "chain_id": int(os.getenv("CHAIN_ID", "1")),
   "usdt_contract": os.getenv("USDT_CONTRACT_ADDRESS", "0xdAC17F958D2ee523a2206206994597C13D831ec7").lower(),
@@ -39,9 +81,17 @@ APP_ENV = {
   "ticket_price_usdt": parse_decimal(os.getenv("TICKET_PRICE_USDT", "10"), "10"),
   "sold_out_delay_blocks": int(os.getenv("SOLD_OUT_DELAY_BLOCKS", "5")),
   "shipping_start_date": os.getenv("SHIPPING_START_DATE", "2026-03-11"),
-  "allowed_origins": [item.strip() for item in os.getenv("CORS_ORIGINS", "*").split(",") if item.strip()],
+  "allowed_origins": ALLOWED_ORIGINS,
+  "session_cookie_name": os.getenv("SESSION_COOKIE_NAME", "winspot24_session").strip() or "winspot24_session",
+  "session_cookie_secure": parse_bool_env(os.getenv("SESSION_COOKIE_SECURE"), True),
+  "session_days": int(os.getenv("SESSION_DAYS", str(DEFAULT_SESSION_DAYS))),
+  "google_client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+  "apple_service_id": os.getenv("APPLE_SERVICE_ID", "").strip(),
+  "apple_redirect_uri": os.getenv("APPLE_REDIRECT_URI", "https://api.winspot24.com/api/v1/auth/apple/callback").strip(),
 }
 APP_ENV["ticket_price_micro"] = int(APP_ENV["ticket_price_usdt"] * Decimal("1000000"))
+APP_ENV["google_auth_enabled"] = bool(APP_ENV["google_client_id"])
+APP_ENV["apple_auth_enabled"] = bool(APP_ENV["apple_service_id"] and APP_ENV["apple_redirect_uri"])
 
 if not HEX_ADDRESS_RE.match(APP_ENV["treasury_address"]):
   raise RuntimeError("Invalid TREASURY_ADDRESS")
@@ -52,10 +102,10 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.getenv("DB_PATH", str(DATA_DIR / "winspot24.db"))
 
-app = FastAPI(title="Winspot24 API", version="1.0.0")
+app = FastAPI(title="Winspot24 API", version="1.1.0")
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=APP_ENV["allowed_origins"] if APP_ENV["allowed_origins"] != ["*"] else ["*"],
+  allow_origins=APP_ENV["allowed_origins"],
   allow_credentials=True,
   allow_methods=["*"],
   allow_headers=["*"],
@@ -78,6 +128,21 @@ class PurchasePayload(BaseModel):
   ticket_count: int = Field(ge=1, le=100)
   language: str | None = Field(default="en", max_length=12)
   shipping: ShippingPayload
+
+
+class GoogleAuthPayload(BaseModel):
+  credential: str = Field(min_length=20)
+
+
+class AccountProfilePayload(BaseModel):
+  full_name: str | None = Field(default=None, max_length=120)
+  phone: str | None = Field(default=None, max_length=40)
+  country: str | None = Field(default=None, max_length=80)
+  city: str | None = Field(default=None, max_length=80)
+  address_line1: str | None = Field(default=None, max_length=180)
+  address_line2: str | None = Field(default=None, max_length=180)
+  postal_code: str | None = Field(default=None, max_length=24)
+  wallet_address: str | None = Field(default=None, max_length=42)
 
 
 def get_conn() -> sqlite3.Connection:
@@ -159,6 +224,64 @@ def init_db() -> None:
       )
       """
     )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        provider_subject TEXT NOT NULL,
+        email TEXT,
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        full_name TEXT,
+        avatar_url TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(provider, provider_subject)
+      )
+      """
+    )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id INTEGER PRIMARY KEY,
+        full_name TEXT,
+        phone TEXT,
+        country TEXT,
+        city TEXT,
+        address_line1 TEXT,
+        address_line2 TEXT,
+        postal_code TEXT,
+        wallet_address TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      """
+    )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        session_token TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+      """
+    )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS oauth_states (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        state TEXT NOT NULL UNIQUE,
+        nonce TEXT,
+        return_to TEXT,
+        created_at TEXT NOT NULL
+      )
+      """
+    )
 
 
 def normalize_address(value: str) -> str:
@@ -166,6 +289,13 @@ def normalize_address(value: str) -> str:
   if not HEX_ADDRESS_RE.match(raw):
     raise HTTPException(status_code=400, detail="Invalid wallet address.")
   return raw
+
+
+def normalize_optional_address(value: str | None) -> str | None:
+  raw = (value or "").strip()
+  if not raw:
+    return None
+  return normalize_address(raw)
 
 
 def normalize_hash(value: str) -> str:
@@ -255,6 +385,63 @@ def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
   return {key: row[key] for key in row.keys()}
 
 
+def trim_optional_text(value: str | None) -> str | None:
+  if value is None:
+    return None
+  trimmed = value.strip()
+  return trimmed or None
+
+
+def empty_profile() -> dict[str, Any]:
+  return {
+    "full_name": None,
+    "phone": None,
+    "country": None,
+    "city": None,
+    "address_line1": None,
+    "address_line2": None,
+    "postal_code": None,
+    "wallet_address": None,
+  }
+
+
+def serialize_profile_row(row: sqlite3.Row | None) -> dict[str, Any]:
+  if not row:
+    return empty_profile()
+  return {
+    "full_name": row["full_name"],
+    "phone": row["phone"],
+    "country": row["country"],
+    "city": row["city"],
+    "address_line1": row["address_line1"],
+    "address_line2": row["address_line2"],
+    "postal_code": row["postal_code"],
+    "wallet_address": row["wallet_address"],
+  }
+
+
+def sanitize_return_to(value: str | None) -> str:
+  fallback = f"{APP_ENV['app_url']}/#account"
+  raw = (value or "").strip()
+  if not raw:
+    return fallback
+
+  parsed = urllib.parse.urlparse(raw)
+  target_root = urllib.parse.urlparse(APP_ENV["app_url"])
+  if not parsed.netloc:
+    return urllib.parse.urljoin(f"{APP_ENV['app_url']}/", raw.lstrip("/"))
+  if parsed.scheme == target_root.scheme and parsed.netloc == target_root.netloc:
+    return raw
+  return fallback
+
+
+def cleanup_auth_tables(conn: sqlite3.Connection) -> None:
+  now_iso = utc_now_iso()
+  fifteen_minutes_ago = (utc_now() - dt.timedelta(minutes=15)).isoformat()
+  conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso,))
+  conn.execute("DELETE FROM oauth_states WHERE created_at <= ?", (fifteen_minutes_ago,))
+
+
 def get_current_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
   return conn.execute(
     "SELECT * FROM rounds WHERE state IN ('open', 'sold_out') ORDER BY round_number DESC LIMIT 1"
@@ -310,7 +497,6 @@ def ensure_shipping_timeline(conn: sqlite3.Connection, round_id: int, drawn_at_i
   requested_start = dt.date.fromisoformat(APP_ENV["shipping_start_date"])
   drawn_at = dt.datetime.fromisoformat(drawn_at_iso.replace("Z", "+00:00")).date()
   start_date = max(requested_start, drawn_at)
-  now = utc_now_iso()
 
   for order, title, detail, planned_date in shipping_steps(start_date):
     conn.execute(
@@ -452,11 +638,322 @@ def timeline_payload(conn: sqlite3.Connection, round_number: int) -> dict[str, A
   return {"round_number": round_number, "items": items, "progress_percent": progress_percent}
 
 
+def upsert_user(
+  conn: sqlite3.Connection,
+  *,
+  provider: str,
+  provider_subject: str,
+  email: str | None,
+  email_verified: bool,
+  full_name: str | None,
+  avatar_url: str | None,
+) -> sqlite3.Row:
+  existing = conn.execute(
+    "SELECT * FROM users WHERE provider = ? AND provider_subject = ?",
+    (provider, provider_subject),
+  ).fetchone()
+  now = utc_now_iso()
+  clean_email = trim_optional_text(email)
+  clean_name = trim_optional_text(full_name)
+  clean_avatar = trim_optional_text(avatar_url)
+
+  if existing:
+    conn.execute(
+      """
+      UPDATE users
+      SET email = ?,
+          email_verified = ?,
+          full_name = COALESCE(?, full_name),
+          avatar_url = COALESCE(?, avatar_url),
+          updated_at = ?
+      WHERE id = ?
+      """,
+      (clean_email, 1 if email_verified else 0, clean_name, clean_avatar, now, existing["id"]),
+    )
+    return conn.execute("SELECT * FROM users WHERE id = ?", (existing["id"],)).fetchone()
+
+  conn.execute(
+    """
+    INSERT INTO users (
+      provider, provider_subject, email, email_verified, full_name, avatar_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+    (provider, provider_subject, clean_email, 1 if email_verified else 0, clean_name, clean_avatar, now, now),
+  )
+  user_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+  return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+
+def get_profile_row(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row | None:
+  return conn.execute("SELECT * FROM user_profiles WHERE user_id = ?", (user_id,)).fetchone()
+
+
+def save_profile(conn: sqlite3.Connection, user_id: int, payload: dict[str, Any]) -> sqlite3.Row:
+  existing = get_profile_row(conn, user_id)
+  current = serialize_profile_row(existing)
+  merged = {**current, **payload}
+  merged["wallet_address"] = normalize_optional_address(merged.get("wallet_address"))
+  now = utc_now_iso()
+
+  if existing:
+    conn.execute(
+      """
+      UPDATE user_profiles
+      SET full_name = ?,
+          phone = ?,
+          country = ?,
+          city = ?,
+          address_line1 = ?,
+          address_line2 = ?,
+          postal_code = ?,
+          wallet_address = ?,
+          updated_at = ?
+      WHERE user_id = ?
+      """,
+      (
+        trim_optional_text(merged.get("full_name")),
+        trim_optional_text(merged.get("phone")),
+        trim_optional_text(merged.get("country")),
+        trim_optional_text(merged.get("city")),
+        trim_optional_text(merged.get("address_line1")),
+        trim_optional_text(merged.get("address_line2")),
+        trim_optional_text(merged.get("postal_code")),
+        merged.get("wallet_address"),
+        now,
+        user_id,
+      ),
+    )
+  else:
+    conn.execute(
+      """
+      INSERT INTO user_profiles (
+        user_id, full_name, phone, country, city, address_line1, address_line2, postal_code, wallet_address, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
+      (
+        user_id,
+        trim_optional_text(merged.get("full_name")),
+        trim_optional_text(merged.get("phone")),
+        trim_optional_text(merged.get("country")),
+        trim_optional_text(merged.get("city")),
+        trim_optional_text(merged.get("address_line1")),
+        trim_optional_text(merged.get("address_line2")),
+        trim_optional_text(merged.get("postal_code")),
+        merged.get("wallet_address"),
+        now,
+      ),
+    )
+  return conn.execute("SELECT * FROM user_profiles WHERE user_id = ?", (user_id,)).fetchone()
+
+
+def create_session(conn: sqlite3.Connection, user_id: int) -> str:
+  cleanup_auth_tables(conn)
+  now = utc_now()
+  token = secrets.token_urlsafe(32)
+  conn.execute(
+    """
+    INSERT INTO sessions (user_id, session_token, created_at, expires_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?)
+    """,
+    (
+      user_id,
+      token,
+      now.isoformat(),
+      (now + dt.timedelta(days=APP_ENV["session_days"])).isoformat(),
+      now.isoformat(),
+    ),
+  )
+  return token
+
+
+def set_session_cookie(response: Response, token: str) -> None:
+  response.set_cookie(
+    key=APP_ENV["session_cookie_name"],
+    value=token,
+    max_age=APP_ENV["session_days"] * 24 * 60 * 60,
+    expires=APP_ENV["session_days"] * 24 * 60 * 60,
+    httponly=True,
+    secure=APP_ENV["session_cookie_secure"],
+    samesite="lax",
+    path="/",
+  )
+
+
+def clear_session_cookie(response: Response) -> None:
+  response.delete_cookie(
+    key=APP_ENV["session_cookie_name"],
+    path="/",
+    httponly=True,
+    secure=APP_ENV["session_cookie_secure"],
+    samesite="lax",
+  )
+
+
+def session_bundle(conn: sqlite3.Connection, token: str | None) -> tuple[sqlite3.Row, sqlite3.Row | None] | None:
+  cleanup_auth_tables(conn)
+  if not token:
+    return None
+
+  session_row = conn.execute(
+    "SELECT * FROM sessions WHERE session_token = ? LIMIT 1", (token,)
+  ).fetchone()
+  if not session_row:
+    return None
+
+  expires_at = parse_iso_datetime(session_row["expires_at"])
+  if not expires_at or expires_at <= utc_now():
+    conn.execute("DELETE FROM sessions WHERE id = ?", (session_row["id"],))
+    return None
+
+  conn.execute("UPDATE sessions SET last_seen_at = ? WHERE id = ?", (utc_now_iso(), session_row["id"]))
+  user_row = conn.execute("SELECT * FROM users WHERE id = ?", (session_row["user_id"],)).fetchone()
+  if not user_row:
+    conn.execute("DELETE FROM sessions WHERE id = ?", (session_row["id"],))
+    return None
+  profile_row = get_profile_row(conn, user_row["id"])
+  return user_row, profile_row
+
+
+def require_session(conn: sqlite3.Connection, request: Request) -> tuple[sqlite3.Row, sqlite3.Row | None]:
+  token = request.cookies.get(APP_ENV["session_cookie_name"])
+  bundle = session_bundle(conn, token)
+  if not bundle:
+    raise HTTPException(status_code=401, detail="Sign in required.")
+  return bundle
+
+
+def session_payload(user_row: sqlite3.Row | None, profile_row: sqlite3.Row | None) -> dict[str, Any]:
+  if not user_row:
+    return {
+      "authenticated": False,
+      "user": None,
+      "profile": empty_profile(),
+    }
+
+  return {
+    "authenticated": True,
+    "user": {
+      "id": user_row["id"],
+      "provider": user_row["provider"],
+      "email": user_row["email"],
+      "email_verified": bool(user_row["email_verified"]),
+      "full_name": user_row["full_name"],
+      "avatar_url": user_row["avatar_url"],
+    },
+    "profile": serialize_profile_row(profile_row),
+  }
+
+
+def parse_apple_user_payload(raw_user: str | None) -> dict[str, Any]:
+  if not raw_user:
+    return {}
+  try:
+    body = json.loads(raw_user)
+  except json.JSONDecodeError:
+    return {}
+
+  name_info = body.get("name") or {}
+  full_name = " ".join(part for part in [name_info.get("firstName"), name_info.get("lastName")] if part).strip() or None
+  return {
+    "email": trim_optional_text(body.get("email")),
+    "full_name": full_name,
+  }
+
+
+def verify_google_credential(credential: str) -> dict[str, Any]:
+  if not APP_ENV["google_auth_enabled"]:
+    raise HTTPException(status_code=503, detail="Google sign-in is not configured.")
+
+  try:
+    payload = google_id_token.verify_oauth2_token(
+      credential,
+      google_requests.Request(),
+      APP_ENV["google_client_id"],
+    )
+  except Exception as exc:
+    raise HTTPException(status_code=400, detail=f"Google token verification failed: {exc}") from exc
+
+  issuer = payload.get("iss")
+  if issuer not in GOOGLE_ISSUERS:
+    raise HTTPException(status_code=400, detail="Invalid Google issuer.")
+  return payload
+
+
+def verify_apple_identity_token(identity_token: str, expected_nonce: str | None = None) -> dict[str, Any]:
+  if not APP_ENV["apple_auth_enabled"]:
+    raise HTTPException(status_code=503, detail="Apple sign-in is not configured.")
+
+  try:
+    signing_key = APPLE_JWK_CLIENT.get_signing_key_from_jwt(identity_token)
+    payload = jwt.decode(
+      identity_token,
+      signing_key.key,
+      algorithms=["RS256"],
+      audience=APP_ENV["apple_service_id"],
+      issuer=APPLE_ISSUER,
+    )
+  except Exception as exc:
+    raise HTTPException(status_code=400, detail=f"Apple token verification failed: {exc}") from exc
+
+  if expected_nonce and payload.get("nonce") != expected_nonce:
+    raise HTTPException(status_code=400, detail="Apple nonce mismatch.")
+  return payload
+
+
+def store_oauth_state(conn: sqlite3.Connection, provider: str, return_to: str) -> tuple[str, str]:
+  cleanup_auth_tables(conn)
+  state_value = secrets.token_urlsafe(24)
+  nonce = secrets.token_urlsafe(24)
+  conn.execute(
+    "INSERT INTO oauth_states (provider, state, nonce, return_to, created_at) VALUES (?, ?, ?, ?, ?)",
+    (provider, state_value, nonce, sanitize_return_to(return_to), utc_now_iso()),
+  )
+  return state_value, nonce
+
+
+def consume_oauth_state(conn: sqlite3.Connection, provider: str, state_value: str) -> sqlite3.Row:
+  row = conn.execute(
+    "SELECT * FROM oauth_states WHERE provider = ? AND state = ? LIMIT 1", (provider, state_value)
+  ).fetchone()
+  if not row:
+    raise HTTPException(status_code=400, detail="OAuth state is invalid or expired.")
+  conn.execute("DELETE FROM oauth_states WHERE id = ?", (row["id"],))
+  return row
+
+
+def maybe_sync_profile_from_purchase(
+  conn: sqlite3.Connection,
+  request: Request,
+  shipping: ShippingPayload,
+  wallet_address: str,
+) -> None:
+  token = request.cookies.get(APP_ENV["session_cookie_name"])
+  bundle = session_bundle(conn, token)
+  if not bundle:
+    return
+  user_row, profile_row = bundle
+  save_profile(
+    conn,
+    user_row["id"],
+    {
+      "full_name": shipping.full_name,
+      "phone": shipping.phone,
+      "country": shipping.country,
+      "city": shipping.city,
+      "address_line1": shipping.address_line1,
+      "address_line2": shipping.address_line2,
+      "postal_code": shipping.postal_code,
+      "wallet_address": wallet_address,
+    },
+  )
+
+
 @app.on_event("startup")
 def on_startup() -> None:
   init_db()
   with get_conn() as conn:
     ensure_current_round(conn)
+    cleanup_auth_tables(conn)
 
 
 @app.get("/api/v1/health")
@@ -478,7 +975,120 @@ def public_config() -> dict[str, Any]:
     "total_tickets": APP_ENV["total_tickets"],
     "max_tickets_per_purchase": APP_ENV["max_tickets_per_purchase"],
     "shipping_start_date": APP_ENV["shipping_start_date"],
+    "google_client_id": APP_ENV["google_client_id"] or None,
+    "google_auth_enabled": APP_ENV["google_auth_enabled"],
+    "apple_auth_enabled": APP_ENV["apple_auth_enabled"],
   }
+
+
+@app.get("/api/v1/account/session")
+def account_session(request: Request) -> dict[str, Any]:
+  with get_conn() as conn:
+    bundle = session_bundle(conn, request.cookies.get(APP_ENV["session_cookie_name"]))
+    if not bundle:
+      return session_payload(None, None)
+    user_row, profile_row = bundle
+    return session_payload(user_row, profile_row)
+
+
+@app.put("/api/v1/account/profile")
+def update_account_profile(payload: AccountProfilePayload, request: Request) -> dict[str, Any]:
+  with get_conn() as conn:
+    user_row, _ = require_session(conn, request)
+    profile_row = save_profile(conn, user_row["id"], payload.model_dump())
+    if trim_optional_text(payload.full_name):
+      conn.execute(
+        "UPDATE users SET full_name = ?, updated_at = ? WHERE id = ?",
+        (trim_optional_text(payload.full_name), utc_now_iso(), user_row["id"]),
+      )
+      user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_row["id"],)).fetchone()
+    return session_payload(user_row, profile_row)
+
+
+@app.post("/api/v1/auth/google")
+def google_sign_in(payload: GoogleAuthPayload) -> Response:
+  claims = verify_google_credential(payload.credential)
+  with get_conn() as conn:
+    user_row = upsert_user(
+      conn,
+      provider="google",
+      provider_subject=claims["sub"],
+      email=claims.get("email"),
+      email_verified=bool(claims.get("email_verified")),
+      full_name=claims.get("name"),
+      avatar_url=claims.get("picture"),
+    )
+    profile_row = get_profile_row(conn, user_row["id"])
+    token = create_session(conn, user_row["id"])
+    response = JSONResponse(session_payload(user_row, profile_row))
+    set_session_cookie(response, token)
+    return response
+
+
+@app.get("/api/v1/auth/apple/start")
+def apple_start(return_to: str | None = None) -> Response:
+  if not APP_ENV["apple_auth_enabled"]:
+    raise HTTPException(status_code=503, detail="Apple sign-in is not configured.")
+
+  with get_conn() as conn:
+    state_value, nonce = store_oauth_state(conn, "apple", return_to or f"{APP_ENV['app_url']}/#account")
+
+  params = urllib.parse.urlencode(
+    {
+      "client_id": APP_ENV["apple_service_id"],
+      "redirect_uri": APP_ENV["apple_redirect_uri"],
+      "response_type": "code id_token",
+      "response_mode": "form_post",
+      "scope": "name email",
+      "state": state_value,
+      "nonce": nonce,
+    }
+  )
+  return RedirectResponse(url=f"https://appleid.apple.com/auth/authorize?{params}", status_code=302)
+
+
+@app.post("/api/v1/auth/apple/callback")
+def apple_callback(
+  state: str = Form(...),
+  id_token: str = Form(...),
+  user: str | None = Form(default=None),
+) -> Response:
+  with get_conn() as conn:
+    state_row = consume_oauth_state(conn, "apple", state)
+    claims = verify_apple_identity_token(id_token, state_row["nonce"])
+    user_payload = parse_apple_user_payload(user)
+
+    email_verified_raw = claims.get("email_verified")
+    email_verified = email_verified_raw in {True, "true", "True", 1, "1"}
+    email = user_payload.get("email") or claims.get("email")
+    full_name = user_payload.get("full_name")
+
+    user_row = upsert_user(
+      conn,
+      provider="apple",
+      provider_subject=claims["sub"],
+      email=email,
+      email_verified=email_verified,
+      full_name=full_name,
+      avatar_url=None,
+    )
+    profile_row = get_profile_row(conn, user_row["id"])
+    token = create_session(conn, user_row["id"])
+
+    response = RedirectResponse(url=sanitize_return_to(state_row["return_to"]), status_code=302)
+    set_session_cookie(response, token)
+    return response
+
+
+@app.post("/api/v1/auth/logout")
+def logout(request: Request) -> Response:
+  with get_conn() as conn:
+    token = request.cookies.get(APP_ENV["session_cookie_name"])
+    if token:
+      conn.execute("DELETE FROM sessions WHERE session_token = ?", (token,))
+  response = JSONResponse({"ok": True})
+  clear_session_cookie(response)
+  return response
 
 
 @app.get("/api/v1/round/current")
@@ -518,7 +1128,7 @@ def finalize_round() -> dict[str, Any]:
 
 
 @app.post("/api/v1/purchases")
-def create_purchase(payload: PurchasePayload) -> dict[str, Any]:
+def create_purchase(payload: PurchasePayload, request: Request) -> dict[str, Any]:
   wallet = normalize_address(payload.wallet_address)
   tx_hash = normalize_hash(payload.tx_hash)
   ticket_count = payload.ticket_count
@@ -605,6 +1215,7 @@ def create_purchase(payload: PurchasePayload) -> dict[str, Any]:
         """,
         (new_sold, new_state, draw_block_number, sold_out_at, current["id"]),
       )
+      maybe_sync_profile_from_purchase(conn, request, payload.shipping, wallet)
       conn.execute("COMMIT")
     except Exception as exc:
       conn.execute("ROLLBACK")

@@ -16,4 +16,7 @@ window.WINSPOT_CONFIG = {
   ticketPriceMicro: 10000000,
   maxTicketsPerPurchase: 20,
   shippingStartDate: "2026-03-11",
+  googleClientId: "",
+  googleAuthEnabled: false,
+  appleAuthEnabled: false,
 };

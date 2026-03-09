@@ -61,6 +61,12 @@ apiBaseUrl: "http://localhost:8000/api/v1"
 - `POST /api/v1/purchases` — фиксация покупки после on-chain tx.
 - `POST /api/v1/round/finalize` — завершение sold-out раунда.
 - `GET /api/v1/round/{round_number}/shipping` — публичный delivery timeline.
+- `GET /api/v1/account/session` — текущая account-сессия и профиль.
+- `PUT /api/v1/account/profile` — сохранение профиля доставки и связанного кошелька.
+- `POST /api/v1/auth/google` — вход через Google ID token.
+- `GET /api/v1/auth/apple/start` — старт Sign in with Apple.
+- `POST /api/v1/auth/apple/callback` — callback Apple auth.
+- `POST /api/v1/auth/logout` — завершение account-сессии.
 
 ## Деплой
 
@@ -100,12 +106,32 @@ Repository Variables:
 - `VPS_PATH` — путь деплоя, например `/opt/winspot24-api` (можно не задавать).
 - `API_DOMAIN` — `api.winspot24.com` (можно не задавать).
 - `ACME_EMAIL` — email для Let's Encrypt (можно не задавать, по умолчанию `admin@winspot24.com`).
+- `APP_URL` — фронтенд-домен, по умолчанию `https://winspot24.com`.
+- `SESSION_COOKIE_NAME` — имя cookie, по умолчанию `winspot24_session`.
+- `SESSION_COOKIE_SECURE` — `true` для production.
+- `SESSION_DAYS` — TTL account-сессии в днях, по умолчанию `30`.
+- `GOOGLE_CLIENT_ID` — OAuth Client ID для Google Sign-In.
+- `APPLE_SERVICE_ID` — Service ID для Sign in with Apple.
+- `APPLE_REDIRECT_URI` — callback URL, по умолчанию `https://api.winspot24.com/api/v1/auth/apple/callback`.
 
 Repository Secrets:
 - `VPS_SSH_KEY` — приватный SSH-ключ для входа на сервер.
 - `ETH_RPC_URL` — RPC URL Ethereum Mainnet.
 
 После этого любой push в `main` с изменениями backend автоматически задеплоит API.
+
+### Что нужно для авторизации
+
+Google:
+- создать OAuth client в Google Cloud,
+- в `Authorized JavaScript origins` добавить `https://winspot24.com`,
+- в `GOOGLE_CLIENT_ID` записать выданный client ID.
+
+Apple:
+- создать `Service ID`,
+- разрешить `https://winspot24.com`,
+- callback указать `https://api.winspot24.com/api/v1/auth/apple/callback`,
+- значения записать в `APPLE_SERVICE_ID` и `APPLE_REDIRECT_URI`.
 
 ## Ограничения и риски
 

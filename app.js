@@ -17,11 +17,15 @@ const DEFAULT_CONFIG = {
   maxTicketsPerPurchase: 20,
   walletRequired: true,
   shippingStartDate: "2026-03-11",
+  googleClientId: "",
+  googleAuthEnabled: false,
+  appleAuthEnabled: false,
 };
 
 const storageKeys = {
   theme: "winspot24.theme.v2",
   language: "winspot24.language.v1",
+  profileDraft: "winspot24.profile.v1",
 };
 
 const LANGUAGE_OPTIONS = [
@@ -573,10 +577,22 @@ const MESSAGES = {
   },
 };
 
+const EMPTY_PROFILE = {
+  full_name: "",
+  phone: "",
+  country: "",
+  city: "",
+  address_line1: "",
+  address_line2: "",
+  postal_code: "",
+  wallet_address: "",
+};
+
 const ui = {
   languageSelect: document.getElementById("languageSelect"),
   themeToggle: document.getElementById("themeToggle"),
   walletButton: document.getElementById("walletButton"),
+  accountButton: document.getElementById("accountButton"),
   roundStatus: document.getElementById("roundStatus"),
   heroTitle: document.getElementById("heroTitle"),
   heroNote: document.getElementById("heroNote"),
@@ -617,6 +633,20 @@ const ui = {
   shippingAddressLine1: document.getElementById("shippingAddressLine1"),
   shippingAddressLine2: document.getElementById("shippingAddressLine2"),
   shippingPostalCode: document.getElementById("shippingPostalCode"),
+  accountSection: document.getElementById("account"),
+  accountIdentity: document.getElementById("accountIdentity"),
+  accountAvatar: document.getElementById("accountAvatar"),
+  accountName: document.getElementById("accountName"),
+  accountEmail: document.getElementById("accountEmail"),
+  accountAuthStatus: document.getElementById("accountAuthStatus"),
+  accountAuthHint: document.getElementById("accountAuthHint"),
+  googleAuthMount: document.getElementById("googleAuthMount"),
+  appleAuthButton: document.getElementById("appleAuthButton"),
+  accountLogoutButton: document.getElementById("accountLogoutButton"),
+  accountSaveButton: document.getElementById("accountSaveButton"),
+  accountSaveState: document.getElementById("accountSaveState"),
+  accountSyncWalletButton: document.getElementById("accountSyncWalletButton"),
+  accountShippingStart: document.getElementById("accountShippingStart"),
 };
 
 const state = {
@@ -633,7 +663,43 @@ const state = {
   history: [],
   delivery: null,
   isBusy: false,
+  session: null,
+  profileDraft: { ...EMPTY_PROFILE },
+  googleScriptPromise: null,
+  accountBusy: false,
+  accountNotice: "",
 };
+
+function langText(ruText, enText) {
+  return state.language === "ru" ? ruText : enText;
+}
+
+function normalizeProfile(profile) {
+  return {
+    ...EMPTY_PROFILE,
+    ...(profile || {}),
+    full_name: profile?.full_name || "",
+    phone: profile?.phone || "",
+    country: profile?.country || "",
+    city: profile?.city || "",
+    address_line1: profile?.address_line1 || "",
+    address_line2: profile?.address_line2 || "",
+    postal_code: profile?.postal_code || "",
+    wallet_address: profile?.wallet_address || "",
+  };
+}
+
+function hasProfileValue(profile) {
+  return Object.values(normalizeProfile(profile)).some((value) => Boolean(value));
+}
+
+function mergedProfile(primary, secondary) {
+  const base = normalizeProfile(secondary);
+  const override = normalizeProfile(primary);
+  return Object.fromEntries(
+    Object.keys(base).map((key) => [key, override[key] || base[key] || ""])
+  );
+}
 
 function readStorage(key, fallback) {
   try {
@@ -699,6 +765,10 @@ function clampTicketCount(value) {
   const parsed = Number.isFinite(value) ? Math.floor(value) : 1;
   const max = Math.max(1, Number(state.config.maxTicketsPerPurchase) || 20);
   return Math.min(Math.max(parsed, 1), max);
+}
+
+function getLinkedWalletAddress() {
+  return state.walletAddress || state.session?.profile?.wallet_address || state.profileDraft.wallet_address || null;
 }
 
 function getRemainingTickets() {
@@ -836,12 +906,19 @@ function mergeBackendConfig(configPayload) {
       configPayload.max_tickets_per_purchase ?? state.config.maxTicketsPerPurchase
     ),
     shippingStartDate: configPayload.shipping_start_date ?? state.config.shippingStartDate,
+    googleClientId: configPayload.google_client_id ?? state.config.googleClientId,
+    googleAuthEnabled: Boolean(configPayload.google_auth_enabled ?? state.config.googleAuthEnabled),
+    appleAuthEnabled: Boolean(configPayload.apple_auth_enabled ?? state.config.appleAuthEnabled),
   };
 }
 
 function apiBase() {
   const raw = (state.config.apiBaseUrl || "/api/v1").trim();
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+}
+
+function apiRoot() {
+  return apiBase().replace(/\/api\/v1$/, "");
 }
 
 async function apiRequest(path, options = {}) {
@@ -851,6 +928,7 @@ async function apiRequest(path, options = {}) {
       "Content-Type": "application/json",
       ...(options.headers || {}),
     },
+    credentials: "include",
     body: options.body,
   });
 
@@ -862,8 +940,55 @@ async function apiRequest(path, options = {}) {
   return payload;
 }
 
+function applyProfileToForm(profile) {
+  const next = normalizeProfile(profile);
+  ui.shippingFullName.value = next.full_name;
+  ui.shippingPhone.value = next.phone;
+  ui.shippingCountry.value = next.country;
+  ui.shippingCity.value = next.city;
+  ui.shippingAddressLine1.value = next.address_line1;
+  ui.shippingAddressLine2.value = next.address_line2;
+  ui.shippingPostalCode.value = next.postal_code;
+}
+
+function currentProfileDraftFromForm() {
+  return normalizeProfile({
+    full_name: ui.shippingFullName.value.trim(),
+    phone: ui.shippingPhone.value.trim(),
+    country: ui.shippingCountry.value.trim(),
+    city: ui.shippingCity.value.trim(),
+    address_line1: ui.shippingAddressLine1.value.trim(),
+    address_line2: ui.shippingAddressLine2.value.trim(),
+    postal_code: ui.shippingPostalCode.value.trim(),
+    wallet_address: state.walletAddress || state.session?.profile?.wallet_address || state.profileDraft.wallet_address,
+  });
+}
+
+function persistProfileDraft() {
+  state.profileDraft = currentProfileDraftFromForm();
+  writeStorage(storageKeys.profileDraft, state.profileDraft);
+}
+
+function hydrateProfileForm() {
+  const preferredProfile = state.session?.profile && hasProfileValue(state.session.profile)
+    ? mergedProfile(state.session.profile, state.profileDraft)
+    : state.profileDraft;
+  applyProfileToForm(preferredProfile);
+}
+
+async function loadSession() {
+  const payload = await apiRequest("/account/session");
+  state.session = payload.authenticated ? payload : null;
+  if (state.session?.profile?.wallet_address && !state.profileDraft.wallet_address) {
+    state.profileDraft.wallet_address = state.session.profile.wallet_address;
+    writeStorage(storageKeys.profileDraft, state.profileDraft);
+  }
+  hydrateProfileForm();
+}
+
 async function refreshData() {
-  const walletQuery = state.walletAddress ? `?wallet=${encodeURIComponent(state.walletAddress)}` : "";
+  const linkedWallet = getLinkedWalletAddress();
+  const walletQuery = linkedWallet ? `?wallet=${encodeURIComponent(linkedWallet)}` : "";
   const [roundPayload, historyPayload] = await Promise.all([
     apiRequest(`/round/current${walletQuery}`),
     apiRequest("/round/history?limit=6"),
@@ -894,11 +1019,20 @@ function renderConfig() {
   ui.chainName.textContent = state.config.chainName;
   ui.tokenName.textContent = `${state.config.tokenSymbol} (${state.config.tokenStandard})`;
   ui.contractAddress.textContent = state.config.contractAddress;
+  ui.accountShippingStart.textContent = new Date(state.config.shippingStartDate).toLocaleDateString(
+    state.language === "ru" ? "ru-RU" : "en-US",
+    { year: "numeric", month: "long", day: "numeric" }
+  );
 }
 
 function renderWallet() {
   const connected = Boolean(state.walletAddress);
-  ui.walletStatus.textContent = connected ? shortAddress(state.walletAddress) : t("wallet_disconnected");
+  const linkedWallet = getLinkedWalletAddress();
+  ui.walletStatus.textContent = connected
+    ? shortAddress(state.walletAddress)
+    : linkedWallet
+      ? shortAddress(linkedWallet)
+      : t("wallet_disconnected");
   ui.walletButton.textContent = connected ? t("wallet_connected") : t("connect_wallet");
   ui.walletButton.classList.toggle("connected", connected);
 }
@@ -926,7 +1060,10 @@ function renderOverview() {
 function renderPurchaseHint() {
   const remaining = getRemainingTickets();
   if (remaining <= 0) {
-    ui.purchaseHint.textContent = "Билеты распроданы. Запусти завершение розыгрыша.";
+    ui.purchaseHint.textContent = langText(
+      "Билеты распроданы. Запусти завершение розыгрыша.",
+      "Tickets are sold out. Finalize the draw."
+    );
     ui.buyChance.textContent = "~0%";
     updateQtyChips();
     return;
@@ -935,17 +1072,31 @@ function renderPurchaseHint() {
   const count = getCurrentInputCount();
   const chance = (count / (state.round?.total_tickets || state.config.totalTickets)) * 100;
   ui.ticketCountInput.value = String(count);
-  ui.purchaseHint.textContent = `Итог: ${formatUSDTFromMicro(count * state.config.ticketPriceMicro)}`;
+  ui.purchaseHint.textContent = `${langText("Итог", "Total")}: ${formatUSDTFromMicro(count * state.config.ticketPriceMicro)}`;
   ui.buyChance.textContent = `~${chance.toFixed(chance < 10 ? 1 : 0)}%`;
   updateQtyChips();
 }
 
 function renderTicketList() {
   clearNode(ui.ticketList);
+  const linkedWallet = getLinkedWalletAddress();
   const walletTickets = state.round?.wallet_tickets || [];
+
+  if (!linkedWallet) {
+    ui.ticketList.className = "ticket-list empty";
+    ui.ticketList.textContent = langText(
+      "Подключи кошелек или привяжи его в кабинете, чтобы увидеть свои билеты.",
+      "Connect a wallet or link it in your account to view your tickets."
+    );
+    return;
+  }
+
   if (!walletTickets.length) {
     ui.ticketList.className = "ticket-list empty";
-    ui.ticketList.textContent = "Ваши билеты этого раунда пока отсутствуют.";
+    ui.ticketList.textContent = langText(
+      "Для этого кошелька пока нет билетов в текущем раунде.",
+      "No tickets are attached to this wallet in the current round yet."
+    );
     return;
   }
 
@@ -963,7 +1114,7 @@ function renderHistory() {
   clearNode(ui.historyList);
   if (!state.history.length) {
     ui.historyList.className = "history-list empty";
-    ui.historyList.textContent = "История пока пуста.";
+    ui.historyList.textContent = langText("История пока пуста.", "No completed rounds yet.");
     return;
   }
 
@@ -972,9 +1123,9 @@ function renderHistory() {
     const winnerId = item.winner_ticket_serial ? `#${String(item.winner_ticket_serial).padStart(3, "0")}` : "-";
     appendRow(ui.historyList, [
       `Раунд #${item.round_number}`,
-      `Победитель: ${winnerId}`,
-      `Кошелек: ${shortAddress(item.winner_wallet || "")}`,
-      `Пул: ${formatUSD((item.sold_tickets * item.ticket_price_micro) / 1_000_000)} USDT`,
+      `${langText("Победитель", "Winner")}: ${winnerId}`,
+      `${langText("Кошелек", "Wallet")}: ${shortAddress(item.winner_wallet || "")}`,
+      `${langText("Пул", "Pool")}: ${formatUSD((item.sold_tickets * item.ticket_price_micro) / 1_000_000)} USDT`,
     ]);
   });
 }
@@ -991,7 +1142,7 @@ function renderDelivery() {
 
   ui.deliveryTimeline.className = "history-list";
   ui.deliveryProgressFill.style.width = `${state.delivery.progress_percent || 0}%`;
-  ui.deliveryProgressText.textContent = `Раунд #${state.delivery.round_number}: ${state.delivery.progress_percent || 0}%`;
+  ui.deliveryProgressText.textContent = `${langText("Раунд", "Round")} #${state.delivery.round_number}: ${state.delivery.progress_percent || 0}%`;
 
   state.delivery.items.forEach((item) => {
     const statusLabel =
@@ -1002,6 +1153,179 @@ function renderDelivery() {
       `${item.planned_date} · ${statusLabel}`,
     ]);
   });
+}
+
+async function loadGoogleScript() {
+  if (!state.config.googleAuthEnabled || !state.config.googleClientId) {
+    return false;
+  }
+  if (window.google?.accounts?.id) {
+    return true;
+  }
+  if (state.googleScriptPromise) {
+    return state.googleScriptPromise;
+  }
+
+  state.googleScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-google-gsi="1"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Google script failed to load.")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleGsi = "1";
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error("Google script failed to load."));
+    document.head.appendChild(script);
+  });
+
+  return state.googleScriptPromise;
+}
+
+async function onGoogleCredentialResponse(response) {
+  if (!response?.credential) {
+    return;
+  }
+  state.accountBusy = true;
+  state.accountNotice = "";
+  renderAccount();
+  try {
+    const sessionPayload = await apiRequest("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    state.session = sessionPayload.authenticated ? sessionPayload : null;
+    hydrateProfileForm();
+    state.accountNotice = langText(
+      "Google-авторизация успешна. Профиль можно сохранять в кабинете.",
+      "Signed in with Google. You can now save your profile to your account."
+    );
+    await refreshData();
+  } catch (error) {
+    state.accountNotice = langText(
+      `Google-вход не выполнен: ${error.message || String(error)}`,
+      `Google sign-in failed: ${error.message || String(error)}`
+    );
+  } finally {
+    state.accountBusy = false;
+    renderAll();
+  }
+}
+
+async function renderGoogleButton() {
+  clearNode(ui.googleAuthMount);
+
+  if (state.session) {
+    ui.googleAuthMount.hidden = true;
+    return;
+  }
+
+  ui.googleAuthMount.hidden = false;
+
+  if (!state.config.googleAuthEnabled || !state.config.googleClientId) {
+    const note = document.createElement("div");
+    note.className = "social-disabled";
+    note.textContent = langText(
+      "Google-вход появится после добавления client ID в backend.",
+      "Google sign-in will appear after a client ID is configured on the backend."
+    );
+    ui.googleAuthMount.appendChild(note);
+    return;
+  }
+
+  try {
+    await loadGoogleScript();
+    if (!window.google?.accounts?.id) {
+      throw new Error("Google Identity Services is unavailable.");
+    }
+    window.google.accounts.id.initialize({
+      client_id: state.config.googleClientId,
+      callback: onGoogleCredentialResponse,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+      use_fedcm_for_prompt: false,
+    });
+    window.google.accounts.id.renderButton(ui.googleAuthMount, {
+      theme: state.theme === "dark" ? "filled_black" : "outline",
+      size: "large",
+      shape: "pill",
+      text: "continue_with",
+      width: 280,
+      logo_alignment: "left",
+    });
+  } catch (error) {
+    const note = document.createElement("div");
+    note.className = "social-disabled";
+    note.textContent = langText(
+      `Google-вход недоступен: ${error.message || String(error)}`,
+      `Google sign-in is unavailable: ${error.message || String(error)}`
+    );
+    ui.googleAuthMount.appendChild(note);
+  }
+}
+
+function renderAccount() {
+  const session = state.session;
+  const linkedWallet = getLinkedWalletAddress();
+  const providerLabel = session?.user?.provider === "google"
+    ? "Google"
+    : session?.user?.provider === "apple"
+      ? "Apple"
+      : null;
+
+  ui.accountButton.textContent = langText("Личный кабинет", "Account");
+  ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || "Winspot24";
+  ui.accountEmail.textContent = session?.user?.email
+    || langText(
+      "Войди через Google или Apple, чтобы сохранить профиль.",
+      "Sign in with Google or Apple to save your profile."
+    );
+  ui.accountAvatar.textContent = (session?.user?.full_name || session?.user?.email || "W").trim().slice(0, 1).toUpperCase();
+
+  ui.accountAuthStatus.textContent = session
+    ? langText(
+        `Вход выполнен через ${providerLabel}. Профиль и адрес можно хранить в кабинете.`,
+        `Signed in with ${providerLabel}. Your profile and shipping details can be stored in your account.`
+      )
+    : langText(
+        "Войди через Google или Apple, чтобы профиль доставки и привязанный кошелек сохранялись между устройствами.",
+        "Sign in with Google or Apple so your delivery profile and linked wallet are saved across devices."
+      );
+
+  ui.accountAuthHint.textContent = state.accountNotice;
+  ui.accountLogoutButton.hidden = !session;
+  ui.accountLogoutButton.disabled = state.accountBusy;
+  ui.accountSaveButton.disabled = state.accountBusy;
+  ui.accountSyncWalletButton.disabled = state.accountBusy || !state.walletAddress || linkedWallet === state.walletAddress;
+  ui.appleAuthButton.disabled = state.accountBusy || !state.config.appleAuthEnabled;
+  ui.appleAuthButton.textContent = state.config.appleAuthEnabled
+    ? "Continue with Apple"
+    : langText("Apple ID скоро", "Apple ID pending setup");
+  ui.accountSaveButton.textContent = session
+    ? langText("Сохранить профиль", "Save profile")
+    : langText("Сохранить в этом браузере", "Save in this browser");
+  ui.accountSaveState.textContent = session
+    ? langText(
+        "После сохранения адрес доставки будет доступен из кабинета на других устройствах.",
+        "After saving, your delivery profile will be available from your account on other devices."
+      )
+    : langText(
+        "Без авторизации профиль хранится только локально в этом браузере.",
+        "Without sign-in, your profile is stored only locally in this browser."
+      );
+
+  if (linkedWallet) {
+    ui.walletStatus.textContent = shortAddress(linkedWallet);
+  }
+
+  void renderGoogleButton();
 }
 
 function renderControls() {
@@ -1019,7 +1343,10 @@ function renderControls() {
   if (state.round?.state === "sold_out") {
     ui.roundStatus.textContent = t("status_closed");
     ui.roundStatus.classList.add("soldout");
-    ui.drawRule.textContent = "Раунд sold-out. Нажми «Завершить розыгрыш» после достижения draw block.";
+    ui.drawRule.textContent = langText(
+      "Раунд sold-out. Нажми «Завершить розыгрыш» после достижения draw block.",
+      "Round is sold out. Finalize the draw after the target block is reached."
+    );
   } else if (state.config.walletRequired && !connected) {
     ui.roundStatus.textContent = t("status_need_wallet");
     ui.roundStatus.classList.remove("soldout");
@@ -1027,7 +1354,10 @@ function renderControls() {
   } else {
     ui.roundStatus.textContent = t("status_open");
     ui.roundStatus.classList.remove("soldout");
-    ui.drawRule.textContent = "Розыгрыш доступен после продажи всех 100 билетов.";
+    ui.drawRule.textContent = langText(
+      "Розыгрыш доступен после продажи всех билетов.",
+      "The draw becomes available after all tickets are sold."
+    );
   }
 }
 
@@ -1041,6 +1371,7 @@ function renderAll() {
   renderHistory();
   renderDelivery();
   renderControls();
+  renderAccount();
 }
 
 function collectShipping() {
@@ -1055,9 +1386,21 @@ function collectShipping() {
   };
 
   if (!payload.full_name || !payload.phone || !payload.country || !payload.city || !payload.address_line1) {
-    throw new Error("Заполни обязательные поля доставки.");
+    throw new Error(
+      langText(
+        "Заполни обязательные поля адреса доставки в личном кабинете.",
+        "Fill in the required delivery fields in your account before buying."
+      )
+    );
   }
   return payload;
+}
+
+function collectAccountProfilePayload() {
+  return {
+    ...currentProfileDraftFromForm(),
+    wallet_address: state.walletAddress || state.session?.profile?.wallet_address || state.profileDraft.wallet_address || null,
+  };
 }
 
 async function connectWallet() {
@@ -1079,7 +1422,13 @@ async function connectWallet() {
   state.provider = provider;
   state.signer = signer;
   state.walletAddress = address;
+  state.profileDraft.wallet_address = address;
+  writeStorage(storageKeys.profileDraft, state.profileDraft);
   renderWallet();
+  state.accountNotice = langText(
+    "Кошелек подключен. При желании его можно сохранить в личном кабинете.",
+    "Wallet connected. You can save it to your account if needed."
+  );
   setDrawMessage(message("msg_wallet_connected"), "alert");
   await refreshData();
 }
@@ -1090,6 +1439,103 @@ async function onWalletClick() {
   } catch (error) {
     setDrawMessage(message("msg_error_prefix", { message: error.message || String(error) }), "alert");
   }
+}
+
+async function saveProfile() {
+  persistProfileDraft();
+  state.accountBusy = true;
+  state.accountNotice = "";
+  renderAccount();
+
+  try {
+    const payload = collectAccountProfilePayload();
+    if (state.session) {
+      const sessionPayload = await apiRequest("/account/profile", {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      state.session = sessionPayload.authenticated ? sessionPayload : null;
+      state.accountNotice = langText(
+        "Профиль сохранен в личном кабинете.",
+        "Profile saved to your account."
+      );
+    } else {
+      state.accountNotice = langText(
+        "Профиль сохранен только в этом браузере. Авторизуйся, чтобы синхронизировать его между устройствами.",
+        "Profile saved only in this browser. Sign in to sync it across devices."
+      );
+    }
+    await refreshData();
+  } catch (error) {
+    state.accountNotice = langText(
+      `Не удалось сохранить профиль: ${error.message || String(error)}`,
+      `Failed to save profile: ${error.message || String(error)}`
+    );
+    renderAll();
+  } finally {
+    state.accountBusy = false;
+    renderAll();
+  }
+}
+
+async function syncWalletToAccount() {
+  if (!state.walletAddress) {
+    state.accountNotice = langText(
+      "Сначала подключи кошелек.",
+      "Connect a wallet first."
+    );
+    renderAll();
+    return;
+  }
+
+  state.profileDraft.wallet_address = state.walletAddress;
+  writeStorage(storageKeys.profileDraft, state.profileDraft);
+  if (state.session) {
+    await saveProfile();
+    return;
+  }
+
+  state.accountNotice = langText(
+    "Кошелек привязан локально в этом браузере.",
+    "Wallet linked locally in this browser."
+  );
+  renderAll();
+}
+
+async function logoutAccount() {
+  state.accountBusy = true;
+  renderAccount();
+  try {
+    await apiRequest("/auth/logout", { method: "POST", body: JSON.stringify({}) });
+    state.session = null;
+    state.accountNotice = langText(
+      "Выход выполнен. Локальный черновик профиля сохранен в браузере.",
+      "Signed out. Your local profile draft remains in this browser."
+    );
+    renderAll();
+  } catch (error) {
+    state.accountNotice = langText(
+      `Не удалось выйти: ${error.message || String(error)}`,
+      `Failed to sign out: ${error.message || String(error)}`
+    );
+    renderAll();
+  } finally {
+    state.accountBusy = false;
+    renderAccount();
+  }
+}
+
+function startAppleSignIn() {
+  if (!state.config.appleAuthEnabled) {
+    state.accountNotice = langText(
+      "Apple Sign In станет доступен после добавления Service ID и redirect URI на backend.",
+      "Apple Sign In will be available after a Service ID and redirect URI are configured on the backend."
+    );
+    renderAll();
+    return;
+  }
+  const returnTo = `${window.location.origin}${window.location.pathname}#account`;
+  window.location.href = `${apiRoot()}/api/v1/auth/apple/start?return_to=${encodeURIComponent(returnTo)}`;
 }
 
 async function buyTickets(event) {
@@ -1139,6 +1585,7 @@ async function buyTickets(event) {
       }),
     });
 
+    persistProfileDraft();
     setDrawMessage(message("msg_purchase_success", { count: ticketCount }), "default");
     await refreshData();
   } catch (error) {
@@ -1185,6 +1632,7 @@ function onThemeToggle() {
   state.theme = state.theme === "dark" ? "light" : "dark";
   writeStorage(storageKeys.theme, state.theme);
   applyTheme();
+  renderAll();
 }
 
 function onLanguageChange() {
@@ -1205,11 +1653,18 @@ function setupWalletListeners() {
       state.provider = null;
       state.signer = null;
       renderWallet();
+      state.accountNotice = langText(
+        "Кошелек отключен. Если он был сохранен в кабинете, история останется доступной там.",
+        "Wallet disconnected. If it was saved in your account, your history remains available there."
+      );
       setDrawMessage(message("msg_wallet_disconnected"), "alert");
       renderControls();
+      renderAll();
       return;
     }
     state.walletAddress = accounts[0].toLowerCase();
+    state.profileDraft.wallet_address = state.walletAddress;
+    writeStorage(storageKeys.profileDraft, state.profileDraft);
     try {
       await refreshData();
     } catch {
@@ -1222,18 +1677,44 @@ function setupWalletListeners() {
   });
 }
 
+function setupProfileDraftListeners() {
+  [
+    ui.shippingFullName,
+    ui.shippingPhone,
+    ui.shippingCountry,
+    ui.shippingCity,
+    ui.shippingAddressLine1,
+    ui.shippingAddressLine2,
+    ui.shippingPostalCode,
+  ].forEach((input) => {
+    input.addEventListener("input", () => {
+      persistProfileDraft();
+      if (!state.session) {
+        renderAccount();
+      }
+    });
+  });
+}
+
+function openAccountSection() {
+  ui.accountSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function bootstrap() {
   state.theme = resolveInitialTheme();
   state.language = resolveInitialLanguage();
+  state.profileDraft = normalizeProfile(readStorage(storageKeys.profileDraft, EMPTY_PROFILE));
 
   applyTheme();
   populateLanguageSelect();
+  hydrateProfileForm();
   applyStaticTranslations();
   renderAll();
 
   ui.languageSelect.addEventListener("change", onLanguageChange);
   ui.themeToggle.addEventListener("click", onThemeToggle);
   ui.walletButton.addEventListener("click", onWalletClick);
+  ui.accountButton.addEventListener("click", openAccountSection);
   ui.purchaseForm.addEventListener("submit", buyTickets);
   ui.drawButton.addEventListener("click", finalizeDraw);
   ui.ticketCountInput.addEventListener("input", renderPurchaseHint);
@@ -1243,18 +1724,41 @@ async function bootstrap() {
       renderPurchaseHint();
     });
   });
+  ui.accountSaveButton.addEventListener("click", saveProfile);
+  ui.accountSyncWalletButton.addEventListener("click", syncWalletToAccount);
+  ui.appleAuthButton.addEventListener("click", startAppleSignIn);
+  ui.accountLogoutButton.addEventListener("click", logoutAccount);
   setupWalletListeners();
+  setupProfileDraftListeners();
 
   try {
     const backendConfig = await apiRequest("/public/config");
     mergeBackendConfig(backendConfig);
+  } catch (error) {
+    setDrawMessage(message("msg_backend_offline"), "alert");
+    console.error("Backend config failed:", error);
+  }
+
+  try {
+    await loadSession();
+  } catch (error) {
+    state.session = null;
+    state.accountNotice = langText(
+      "Сессия кабинета пока недоступна. Можно продолжать как гость.",
+      "Account session is unavailable right now. You can continue as a guest."
+    );
+  }
+
+  try {
     await refreshData();
   } catch (error) {
     setDrawMessage(message("msg_backend_offline"), "alert");
-    // Keep technical details in console for debugging instead of showing raw fetch internals to users.
-    // eslint-disable-next-line no-console
     console.error("Backend bootstrap failed:", error);
     renderAll();
+  }
+
+  if (window.location.hash === "#account") {
+    openAccountSection();
   }
 }
 
