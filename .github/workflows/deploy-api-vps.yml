@@ -158,7 +158,10 @@ jobs:
         run: |
           set -euo pipefail
           RSYNC_SSH="ssh -p ${VPS_PORT} -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
-          rsync -az --delete -e "${RSYNC_SSH}" \
+          rsync -az --delete \
+            --exclude 'backend/data/' \
+            --exclude 'backend/data/**' \
+            -e "${RSYNC_SSH}" \
             backend deploy \
             "${VPS_USER}@${VPS_HOST}:${VPS_PATH}/"
 
