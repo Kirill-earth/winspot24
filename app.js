@@ -671,6 +671,7 @@ const state = {
   accountBusy: false,
   accountNotice: "",
 };
+const currentPage = document.body?.dataset?.page || "home";
 
 function langText(ruText, enText) {
   return state.language === "ru" ? ruText : enText;
@@ -781,6 +782,9 @@ function getRemainingTickets() {
 }
 
 function getCurrentInputCount() {
+  if (!ui.ticketCountInput) {
+    return 0;
+  }
   const remaining = getRemainingTickets();
   if (remaining <= 0) {
     return 0;
@@ -790,11 +794,18 @@ function getCurrentInputCount() {
 
 function setBusy(isBusy) {
   state.isBusy = isBusy;
-  ui.purchaseButton.disabled = isBusy || getRemainingTickets() === 0;
-  ui.drawButton.disabled = isBusy || !state.round || state.round.state !== "sold_out";
+  if (ui.purchaseButton) {
+    ui.purchaseButton.disabled = isBusy || getRemainingTickets() === 0;
+  }
+  if (ui.drawButton) {
+    ui.drawButton.disabled = isBusy || !state.round || state.round.state !== "sold_out";
+  }
 }
 
 function updateQtyChips() {
+  if (!ui.ticketCountInput) {
+    return;
+  }
   const selected = Number(ui.ticketCountInput.value);
   ui.qtyChips.forEach((chip) => {
     const chipQty = Number(chip.dataset.qty);
@@ -824,6 +835,9 @@ function appendRow(container, lines) {
 }
 
 function setDrawMessage(text, mode = "default") {
+  if (!ui.drawResult) {
+    return;
+  }
   ui.drawResult.className = "draw-result";
   if (mode === "win") {
     ui.drawResult.classList.add("win");
@@ -863,7 +877,9 @@ function resolveInitialLanguage() {
 
 function applyTheme() {
   document.documentElement.setAttribute("data-theme", state.theme);
-  ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+  if (ui.themeToggle) {
+    ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+  }
 }
 
 function applyStaticTranslations() {
@@ -875,10 +891,15 @@ function applyStaticTranslations() {
       element.textContent = dictionary[key];
     }
   });
-  ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+  if (ui.themeToggle) {
+    ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+  }
 }
 
 function populateLanguageSelect() {
+  if (!ui.languageSelect) {
+    return;
+  }
   clearNode(ui.languageSelect);
   LANGUAGE_OPTIONS.forEach((item) => {
     const option = document.createElement("option");
@@ -944,6 +965,9 @@ async function apiRequest(path, options = {}) {
 }
 
 function applyProfileToForm(profile) {
+  if (!ui.shippingFullName) {
+    return;
+  }
   const next = normalizeProfile(profile);
   ui.shippingFullName.value = next.full_name;
   ui.shippingPhone.value = next.phone;
@@ -955,6 +979,9 @@ function applyProfileToForm(profile) {
 }
 
 function currentProfileDraftFromForm() {
+  if (!ui.shippingFullName) {
+    return mergedProfile(state.profileDraft, state.session?.profile || EMPTY_PROFILE);
+  }
   return normalizeProfile({
     full_name: ui.shippingFullName.value.trim(),
     phone: ui.shippingPhone.value.trim(),
@@ -973,6 +1000,9 @@ function persistProfileDraft() {
 }
 
 function hydrateProfileForm() {
+  if (!ui.shippingFullName) {
+    return;
+  }
   const preferredProfile = state.session?.profile && hasProfileValue(state.session.profile)
     ? mergedProfile(state.session.profile, state.profileDraft)
     : state.profileDraft;
@@ -1041,27 +1071,43 @@ async function refreshData() {
 }
 
 function renderConfig() {
-  ui.heroTitle.textContent = `${state.config.prizeName}`;
-  ui.heroNote.textContent = `${state.config.totalTickets} билетов · ${formatUSD(state.config.ticketPrice)} · Приз: ${state.config.prizeName}`;
-  ui.chainName.textContent = state.config.chainName;
-  ui.tokenName.textContent = `${state.config.tokenSymbol} (${state.config.tokenStandard})`;
-  ui.contractAddress.textContent = state.config.contractAddress;
-  ui.accountShippingStart.textContent = new Date(state.config.shippingStartDate).toLocaleDateString(
-    state.language === "ru" ? "ru-RU" : "en-US",
-    { year: "numeric", month: "long", day: "numeric" }
-  );
+  if (ui.heroTitle) {
+    ui.heroTitle.textContent = `${state.config.prizeName}`;
+  }
+  if (ui.heroNote) {
+    ui.heroNote.textContent = `${state.config.totalTickets} билетов · ${formatUSD(state.config.ticketPrice)} · Приз: ${state.config.prizeName}`;
+  }
+  if (ui.chainName) {
+    ui.chainName.textContent = state.config.chainName;
+  }
+  if (ui.tokenName) {
+    ui.tokenName.textContent = `${state.config.tokenSymbol} (${state.config.tokenStandard})`;
+  }
+  if (ui.contractAddress) {
+    ui.contractAddress.textContent = state.config.contractAddress;
+  }
+  if (ui.accountShippingStart) {
+    ui.accountShippingStart.textContent = new Date(state.config.shippingStartDate).toLocaleDateString(
+      state.language === "ru" ? "ru-RU" : "en-US",
+      { year: "numeric", month: "long", day: "numeric" }
+    );
+  }
 }
 
 function renderWallet() {
   const connected = Boolean(state.walletAddress);
   const linkedWallet = getLinkedWalletAddress();
-  ui.walletStatus.textContent = connected
-    ? shortAddress(state.walletAddress)
-    : linkedWallet
-      ? shortAddress(linkedWallet)
-      : t("wallet_disconnected");
-  ui.walletButton.textContent = connected ? t("wallet_connected") : t("connect_wallet");
-  ui.walletButton.classList.toggle("connected", connected);
+  if (ui.walletStatus) {
+    ui.walletStatus.textContent = connected
+      ? shortAddress(state.walletAddress)
+      : linkedWallet
+        ? shortAddress(linkedWallet)
+        : t("wallet_disconnected");
+  }
+  if (ui.walletButton) {
+    ui.walletButton.textContent = connected ? t("wallet_connected") : t("connect_wallet");
+    ui.walletButton.classList.toggle("connected", connected);
+  }
 }
 
 function renderOverview() {
@@ -1071,20 +1117,45 @@ function renderOverview() {
   const progress = total > 0 ? (sold / total) * 100 : 0;
   const poolMicro = sold * state.config.ticketPriceMicro;
 
-  ui.ticketPrice.textContent = formatUSD(state.config.ticketPrice);
-  ui.ticketCurrency.textContent = state.config.tokenSymbol;
-  ui.ticketsSold.textContent = String(sold);
-  ui.ticketsTotal.textContent = String(total);
-  ui.ticketsRemaining.textContent = String(remaining);
-  ui.remainingInline.textContent = String(remaining);
-  ui.poolValue.textContent = formatUSD(poolMicro / 1_000_000);
-  ui.soldPercent.textContent = `${Math.round(progress)}%`;
-  ui.roundLabel.textContent = `Раунд #${state.round?.round_number ?? 1}`;
-  ui.progressText.textContent = `Продано ${sold} из ${total} билетов`;
-  ui.progressFill.style.width = `${Math.min(progress, 100)}%`;
+  if (ui.ticketPrice) {
+    ui.ticketPrice.textContent = formatUSD(state.config.ticketPrice);
+  }
+  if (ui.ticketCurrency) {
+    ui.ticketCurrency.textContent = state.config.tokenSymbol;
+  }
+  if (ui.ticketsSold) {
+    ui.ticketsSold.textContent = String(sold);
+  }
+  if (ui.ticketsTotal) {
+    ui.ticketsTotal.textContent = String(total);
+  }
+  if (ui.ticketsRemaining) {
+    ui.ticketsRemaining.textContent = String(remaining);
+  }
+  if (ui.remainingInline) {
+    ui.remainingInline.textContent = String(remaining);
+  }
+  if (ui.poolValue) {
+    ui.poolValue.textContent = formatUSD(poolMicro / 1_000_000);
+  }
+  if (ui.soldPercent) {
+    ui.soldPercent.textContent = `${Math.round(progress)}%`;
+  }
+  if (ui.roundLabel) {
+    ui.roundLabel.textContent = `Раунд #${state.round?.round_number ?? 1}`;
+  }
+  if (ui.progressText) {
+    ui.progressText.textContent = `Продано ${sold} из ${total} билетов`;
+  }
+  if (ui.progressFill) {
+    ui.progressFill.style.width = `${Math.min(progress, 100)}%`;
+  }
 }
 
 function renderPurchaseHint() {
+  if (!ui.purchaseHint || !ui.buyChance || !ui.ticketCountInput) {
+    return;
+  }
   const remaining = getRemainingTickets();
   if (remaining <= 0) {
     ui.purchaseHint.textContent = langText(
@@ -1105,6 +1176,9 @@ function renderPurchaseHint() {
 }
 
 function renderTicketList() {
+  if (!ui.ticketList) {
+    return;
+  }
   clearNode(ui.ticketList);
   const linkedWallet = getLinkedWalletAddress();
   const walletTickets = state.round?.wallet_tickets || [];
@@ -1138,6 +1212,9 @@ function renderTicketList() {
 }
 
 function renderHistory() {
+  if (!ui.historyList) {
+    return;
+  }
   clearNode(ui.historyList);
   if (!state.history.length) {
     ui.historyList.className = "history-list empty";
@@ -1158,6 +1235,9 @@ function renderHistory() {
 }
 
 function renderDelivery() {
+  if (!ui.deliveryTimeline || !ui.deliveryProgressFill || !ui.deliveryProgressText) {
+    return;
+  }
   clearNode(ui.deliveryTimeline);
   if (!state.delivery || !state.delivery.items || !state.delivery.items.length) {
     ui.deliveryTimeline.className = "history-list empty";
@@ -1183,6 +1263,9 @@ function renderDelivery() {
 }
 
 async function requestEmailMagicLink() {
+  if (!ui.authEmailInput) {
+    return;
+  }
   const email = ui.authEmailInput.value.trim().toLowerCase();
   if (!email) {
     state.accountNotice = langText(
@@ -1227,7 +1310,12 @@ function renderAccount() {
   const linkedWallet = getLinkedWalletAddress();
   const providerLabel = session?.user?.provider === "email" ? "Email" : "Email";
 
-  ui.accountButton.textContent = langText("Личный кабинет", "Account");
+  if (ui.accountButton) {
+    ui.accountButton.textContent = langText("Личный кабинет", "Account");
+  }
+  if (!ui.accountName || !ui.accountEmail || !ui.accountAvatar || !ui.accountAuthStatus || !ui.accountAuthHint) {
+    return;
+  }
   ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || session?.user?.email || "Winspot24";
   ui.accountEmail.textContent = session?.user?.email
     || langText(
@@ -1289,31 +1377,48 @@ function renderControls() {
   const soldOut = remaining <= 0;
   const connected = Boolean(state.walletAddress);
 
-  ui.purchaseButton.disabled = state.isBusy || soldOut;
-  ui.ticketCountInput.disabled = state.isBusy || soldOut;
+  if (ui.purchaseButton) {
+    ui.purchaseButton.disabled = state.isBusy || soldOut;
+  }
+  if (ui.ticketCountInput) {
+    ui.ticketCountInput.disabled = state.isBusy || soldOut;
+  }
   ui.qtyChips.forEach((chip) => {
     chip.disabled = state.isBusy || soldOut;
   });
-  ui.drawButton.disabled = state.isBusy || state.round?.state !== "sold_out";
+  if (ui.drawButton) {
+    ui.drawButton.disabled = state.isBusy || state.round?.state !== "sold_out";
+  }
+
+  if (!ui.roundStatus) {
+    return;
+  }
+  ui.roundStatus.classList.remove("visually-hidden");
 
   if (state.round?.state === "sold_out") {
     ui.roundStatus.textContent = t("status_closed");
     ui.roundStatus.classList.add("soldout");
-    ui.drawRule.textContent = langText(
+    if (ui.drawRule) {
+      ui.drawRule.textContent = langText(
       "Раунд sold-out. Нажми «Завершить розыгрыш» после достижения draw block.",
       "Round is sold out. Finalize the draw after the target block is reached."
-    );
+      );
+    }
   } else if (state.config.walletRequired && !connected) {
     ui.roundStatus.textContent = t("status_need_wallet");
     ui.roundStatus.classList.remove("soldout");
-    ui.drawRule.textContent = message("msg_round_wait");
+    if (ui.drawRule) {
+      ui.drawRule.textContent = message("msg_round_wait");
+    }
   } else {
     ui.roundStatus.textContent = t("status_open");
     ui.roundStatus.classList.remove("soldout");
-    ui.drawRule.textContent = langText(
+    if (ui.drawRule) {
+      ui.drawRule.textContent = langText(
       "Розыгрыш доступен после продажи всех билетов.",
       "The draw becomes available after all tickets are sold."
-    );
+      );
+    }
   }
 }
 
@@ -1331,21 +1436,24 @@ function renderAll() {
 }
 
 function collectShipping() {
+  const sourceProfile = ui.shippingFullName
+    ? currentProfileDraftFromForm()
+    : mergedProfile(state.profileDraft, state.session?.profile || EMPTY_PROFILE);
   const payload = {
-    full_name: ui.shippingFullName.value.trim(),
-    phone: ui.shippingPhone.value.trim(),
-    country: ui.shippingCountry.value.trim(),
-    city: ui.shippingCity.value.trim(),
-    address_line1: ui.shippingAddressLine1.value.trim(),
-    address_line2: ui.shippingAddressLine2.value.trim(),
-    postal_code: ui.shippingPostalCode.value.trim(),
+    full_name: sourceProfile.full_name.trim(),
+    phone: sourceProfile.phone.trim(),
+    country: sourceProfile.country.trim(),
+    city: sourceProfile.city.trim(),
+    address_line1: sourceProfile.address_line1.trim(),
+    address_line2: sourceProfile.address_line2.trim(),
+    postal_code: sourceProfile.postal_code.trim(),
   };
 
   if (!payload.full_name || !payload.phone || !payload.country || !payload.city || !payload.address_line1) {
     throw new Error(
       langText(
-        "Заполни обязательные поля адреса доставки в личном кабинете.",
-        "Fill in the required delivery fields in your account before buying."
+        "Заполни обязательные поля адреса доставки на отдельной странице личного кабинета.",
+        "Fill in the required delivery fields on the separate account page before buying."
       )
     );
   }
@@ -1579,6 +1687,9 @@ function onThemeToggle() {
 }
 
 function onLanguageChange() {
+  if (!ui.languageSelect) {
+    return;
+  }
   state.language = ui.languageSelect.value;
   writeStorage(storageKeys.language, state.language);
   applyStaticTranslations();
@@ -1629,7 +1740,7 @@ function setupProfileDraftListeners() {
     ui.shippingAddressLine1,
     ui.shippingAddressLine2,
     ui.shippingPostalCode,
-  ].forEach((input) => {
+  ].filter(Boolean).forEach((input) => {
     input.addEventListener("input", () => {
       persistProfileDraft();
       if (!state.session) {
@@ -1640,7 +1751,11 @@ function setupProfileDraftListeners() {
 }
 
 function openAccountSection() {
-  ui.accountSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (currentPage !== "account" || !ui.accountSection) {
+    window.location.href = "./account.html";
+    return;
+  }
+  ui.accountSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function bootstrap() {
@@ -1652,31 +1767,60 @@ async function bootstrap() {
   applyTheme();
   populateLanguageSelect();
   hydrateProfileForm();
-  ui.authEmailInput.value = state.authEmailDraft;
+  if (ui.authEmailInput) {
+    ui.authEmailInput.value = state.authEmailDraft;
+  }
   applyStaticTranslations();
   renderAll();
 
-  ui.languageSelect.addEventListener("change", onLanguageChange);
-  ui.themeToggle.addEventListener("click", onThemeToggle);
-  ui.walletButton.addEventListener("click", onWalletClick);
-  ui.accountButton.addEventListener("click", openAccountSection);
-  ui.purchaseForm.addEventListener("submit", buyTickets);
-  ui.drawButton.addEventListener("click", finalizeDraw);
-  ui.ticketCountInput.addEventListener("input", renderPurchaseHint);
+  if (ui.languageSelect) {
+    ui.languageSelect.addEventListener("change", onLanguageChange);
+  }
+  if (ui.themeToggle) {
+    ui.themeToggle.addEventListener("click", onThemeToggle);
+  }
+  if (ui.walletButton) {
+    ui.walletButton.addEventListener("click", onWalletClick);
+  }
+  if (ui.accountButton) {
+    ui.accountButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      openAccountSection();
+    });
+  }
+  if (ui.purchaseForm) {
+    ui.purchaseForm.addEventListener("submit", buyTickets);
+  }
+  if (ui.drawButton) {
+    ui.drawButton.addEventListener("click", finalizeDraw);
+  }
+  if (ui.ticketCountInput) {
+    ui.ticketCountInput.addEventListener("input", renderPurchaseHint);
+  }
   ui.qtyChips.forEach((chip) => {
     chip.addEventListener("click", () => {
       ui.ticketCountInput.value = chip.dataset.qty || "1";
       renderPurchaseHint();
     });
   });
-  ui.authEmailInput.addEventListener("input", () => {
-    state.authEmailDraft = ui.authEmailInput.value.trim();
-    writeStorage(storageKeys.authEmailDraft, state.authEmailDraft);
-  });
-  ui.emailAuthButton.addEventListener("click", requestEmailMagicLink);
-  ui.accountSaveButton.addEventListener("click", saveProfile);
-  ui.accountSyncWalletButton.addEventListener("click", syncWalletToAccount);
-  ui.accountLogoutButton.addEventListener("click", logoutAccount);
+  if (ui.authEmailInput) {
+    ui.authEmailInput.addEventListener("input", () => {
+      state.authEmailDraft = ui.authEmailInput.value.trim();
+      writeStorage(storageKeys.authEmailDraft, state.authEmailDraft);
+    });
+  }
+  if (ui.emailAuthButton) {
+    ui.emailAuthButton.addEventListener("click", requestEmailMagicLink);
+  }
+  if (ui.accountSaveButton) {
+    ui.accountSaveButton.addEventListener("click", saveProfile);
+  }
+  if (ui.accountSyncWalletButton) {
+    ui.accountSyncWalletButton.addEventListener("click", syncWalletToAccount);
+  }
+  if (ui.accountLogoutButton) {
+    ui.accountLogoutButton.addEventListener("click", logoutAccount);
+  }
   setupWalletListeners();
   setupProfileDraftListeners();
 
