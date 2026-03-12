@@ -196,7 +196,8 @@ jobs:
 
           cd "${VPS_PATH}/deploy/api"
           mkdir -p ../../backend/data
+          $SUDO docker compose down --remove-orphans >/dev/null 2>&1 || true
           $SUDO docker rm -f winspot24-api winspot24-api-caddy >/dev/null 2>&1 || true
-          $SUDO docker compose up -d --build --remove-orphans
+          $SUDO docker compose up -d --build --remove-orphans --force-recreate
           $SUDO docker compose ps
           EOF
