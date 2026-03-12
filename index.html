@@ -10,12 +10,12 @@
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body data-page="home">
     <div class="ambient ambient-top"></div>
     <div class="ambient ambient-bottom"></div>
 
     <header class="site-header">
-      <a class="logo" href="#">
+      <a class="logo" href="./index.html">
         <span class="logo-orb" aria-hidden="true"></span>
         <span class="logo-text">winspot24</span>
       </a>
@@ -24,7 +24,7 @@
         <select id="languageSelect" class="language-select" aria-label="Language"></select>
         <button id="themeToggle" class="ghost-button theme-button" type="button">Dark Mode</button>
         <button id="walletButton" class="ghost-button" type="button">Connect Wallet</button>
-        <button id="accountButton" class="ghost-button" type="button">Личный кабинет</button>
+        <a id="accountButton" class="ghost-button" href="./account.html">Личный кабинет</a>
       </div>
     </header>
 
@@ -111,7 +111,7 @@
             <p class="hint" id="purchaseHint">Итог: $10 USDT</p>
             <p class="hint secondary">Шанс при этой покупке: <span id="buyChance">~1%</span></p>
             <p class="hint secondary">Осталось билетов: <span id="remainingInline">100</span></p>
-            <p class="hint secondary">Заполни адрес доставки и авторизацию в личном кабинете ниже.</p>
+            <p class="hint secondary">Заполни адрес доставки и авторизацию на отдельной странице личного кабинета.</p>
           </form>
         </article>
 
@@ -147,123 +147,21 @@
         </article>
       </section>
 
-      <section class="account-shell reveal" id="account">
-        <div class="account-shell-head">
+      <section class="account-cta reveal">
+        <article class="panel account-cta-panel">
           <div>
             <p class="eyebrow">ACCOUNT</p>
-            <h2>Личный кабинет</h2>
+            <h2>Личный кабинет теперь отдельно</h2>
             <p class="panel-copy">
-              Авторизация по email magic link, адрес доставки, связанные данные кошелька и вся персональная информация по участию.
+              Авторизация, адрес доставки, привязка кошелька, билеты и история раундов вынесены на отдельную страницу,
+              чтобы главная оставалась максимально чистой и сфокусированной на покупке.
             </p>
           </div>
-          <div class="account-identity" id="accountIdentity">
-            <div class="account-avatar" id="accountAvatar">W</div>
-          <div>
-            <strong id="accountName">Guest</strong>
-              <p id="accountEmail">Войди по email magic link, чтобы сохранить профиль.</p>
-            </div>
+          <div class="account-cta-actions">
+            <a class="primary-button" href="./account.html">Открыть личный кабинет</a>
+            <p class="hint secondary">Перед покупкой проверь, что профиль и адрес доставки заполнены в кабинете.</p>
           </div>
-        </div>
-
-        <div class="panel account-auth-panel">
-          <div class="account-auth-copy">
-            <h3>Авторизация</h3>
-            <p id="accountAuthStatus" class="panel-copy">
-              Введи email. Мы отправим одноразовую ссылку для входа без пароля.
-            </p>
-            <p id="accountAuthHint" class="hint secondary"></p>
-          </div>
-          <div class="account-auth-actions">
-            <label class="field-label auth-email-field">
-              <span>Email</span>
-              <input id="authEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com" />
-            </label>
-            <button id="emailAuthButton" class="ghost-button social-button" type="button">Send sign-in link</button>
-            <button id="accountLogoutButton" class="ghost-button" type="button">Log out</button>
-          </div>
-        </div>
-
-        <div class="account-grid">
-          <article class="panel account-profile-panel">
-            <div class="panel-head account-panel-head">
-              <div>
-                <h3>Профиль и доставка</h3>
-                <p class="panel-copy">Эти данные используются для связи с победителем и отправки MacBook Neo.</p>
-              </div>
-              <div class="account-panel-actions">
-                <button id="accountSyncWalletButton" class="ghost-button" type="button">Use connected wallet</button>
-                <button id="accountSaveButton" class="primary-button" type="button">Save profile</button>
-              </div>
-            </div>
-
-            <div class="status-meta account-meta">
-              <article>
-                <span>Wallet</span>
-                <strong id="walletStatus">Disconnected</strong>
-              </article>
-              <article>
-                <span>Delivery start</span>
-                <strong id="accountShippingStart">March 11, 2026</strong>
-              </article>
-            </div>
-
-            <div class="shipping-form account-shipping-form">
-              <div class="shipping-grid">
-                <label class="field-label">
-                  <span data-i18n="ship_name">Имя и фамилия</span>
-                  <input id="shippingFullName" name="shippingFullName" type="text" autocomplete="name" />
-                </label>
-                <label class="field-label">
-                  <span data-i18n="ship_phone">Телефон</span>
-                  <input id="shippingPhone" name="shippingPhone" type="tel" autocomplete="tel" />
-                </label>
-                <label class="field-label">
-                  <span data-i18n="ship_country">Страна</span>
-                  <input id="shippingCountry" name="shippingCountry" type="text" autocomplete="country-name" />
-                </label>
-                <label class="field-label">
-                  <span data-i18n="ship_city">Город</span>
-                  <input id="shippingCity" name="shippingCity" type="text" autocomplete="address-level2" />
-                </label>
-                <label class="field-label full">
-                  <span data-i18n="ship_line1">Адрес, строка 1</span>
-                  <input id="shippingAddressLine1" name="shippingAddressLine1" type="text" autocomplete="address-line1" />
-                </label>
-                <label class="field-label full">
-                  <span data-i18n="ship_line2">Адрес, строка 2 (необязательно)</span>
-                  <input id="shippingAddressLine2" name="shippingAddressLine2" type="text" autocomplete="address-line2" />
-                </label>
-                <label class="field-label">
-                  <span data-i18n="ship_postal">Почтовый индекс</span>
-                  <input id="shippingPostalCode" name="shippingPostalCode" type="text" autocomplete="postal-code" />
-                </label>
-              </div>
-              <p id="accountSaveState" class="hint secondary"></p>
-              <p class="hint secondary" id="lastTxHash"></p>
-            </div>
-          </article>
-
-          <article class="panel account-data-panel">
-            <h3>Мои билеты</h3>
-            <div id="ticketList" class="ticket-list empty">Подключи кошелек, чтобы увидеть свои билеты.</div>
-          </article>
-
-          <article class="panel account-data-panel">
-            <h3 data-i18n="history_title">История раундов</h3>
-            <div id="historyList" class="history-list empty">История пока пуста.</div>
-          </article>
-
-          <article class="panel account-data-panel">
-            <h3 data-i18n="delivery_title">Публичная доставка из Дубая</h3>
-            <div class="delivery-progress">
-              <div class="progress-track compact">
-                <div id="deliveryProgressFill" class="progress-fill"></div>
-              </div>
-              <p id="deliveryProgressText" class="hint secondary"></p>
-            </div>
-            <div id="deliveryTimeline" class="history-list empty"></div>
-          </article>
-        </div>
+        </article>
       </section>
     </main>
 
