@@ -153,14 +153,14 @@
             <p class="eyebrow">ACCOUNT</p>
             <h2>Личный кабинет</h2>
             <p class="panel-copy">
-              Google / Apple авторизация, адрес доставки, связанные данные кошелька и вся персональная информация по участию.
+              Авторизация по email magic link, адрес доставки, связанные данные кошелька и вся персональная информация по участию.
             </p>
           </div>
           <div class="account-identity" id="accountIdentity">
             <div class="account-avatar" id="accountAvatar">W</div>
-            <div>
-              <strong id="accountName">Guest</strong>
-              <p id="accountEmail">Войди через Google или Apple, чтобы сохранить профиль.</p>
+          <div>
+            <strong id="accountName">Guest</strong>
+              <p id="accountEmail">Войди по email magic link, чтобы сохранить профиль.</p>
             </div>
           </div>
         </div>
@@ -169,13 +169,16 @@
           <div class="account-auth-copy">
             <h3>Авторизация</h3>
             <p id="accountAuthStatus" class="panel-copy">
-              Войди через Google или Apple, чтобы сохранить профиль доставки между устройствами.
+              Введи email. Мы отправим одноразовую ссылку для входа без пароля.
             </p>
             <p id="accountAuthHint" class="hint secondary"></p>
           </div>
           <div class="account-auth-actions">
-            <div id="googleAuthMount" class="social-slot"></div>
-            <button id="appleAuthButton" class="ghost-button social-button" type="button">Continue with Apple</button>
+            <label class="field-label auth-email-field">
+              <span>Email</span>
+              <input id="authEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com" />
+            </label>
+            <button id="emailAuthButton" class="ghost-button social-button" type="button">Send sign-in link</button>
             <button id="accountLogoutButton" class="ghost-button" type="button">Log out</button>
           </div>
         </div>

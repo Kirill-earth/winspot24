@@ -32,10 +32,19 @@ jobs:
       SESSION_COOKIE_NAME: ${{ vars.SESSION_COOKIE_NAME }}
       SESSION_COOKIE_SECURE: ${{ vars.SESSION_COOKIE_SECURE }}
       SESSION_DAYS: ${{ vars.SESSION_DAYS }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+      SMTP_SENDER_EMAIL: ${{ vars.SMTP_SENDER_EMAIL }}
+      SMTP_SENDER_NAME: ${{ vars.SMTP_SENDER_NAME }}
+      SMTP_STARTTLS: ${{ vars.SMTP_STARTTLS }}
+      SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
+      MAGIC_LINK_TTL_MINUTES: ${{ vars.MAGIC_LINK_TTL_MINUTES }}
       GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
       APPLE_SERVICE_ID: ${{ vars.APPLE_SERVICE_ID }}
       APPLE_REDIRECT_URI: ${{ vars.APPLE_REDIRECT_URI }}
       ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -73,6 +82,21 @@ jobs:
           if [[ -z "${SESSION_DAYS}" ]]; then
             echo "SESSION_DAYS=30" >> "$GITHUB_ENV"
           fi
+          if [[ -z "${SMTP_PORT}" ]]; then
+            echo "SMTP_PORT=587" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SMTP_SENDER_NAME}" ]]; then
+            echo "SMTP_SENDER_NAME=Winspot24" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SMTP_STARTTLS}" ]]; then
+            echo "SMTP_STARTTLS=true" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SMTP_USE_SSL}" ]]; then
+            echo "SMTP_USE_SSL=false" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${MAGIC_LINK_TTL_MINUTES}" ]]; then
+            echo "MAGIC_LINK_TTL_MINUTES=20" >> "$GITHUB_ENV"
+          fi
           if [[ -z "${APPLE_REDIRECT_URI}" ]]; then
             echo "APPLE_REDIRECT_URI=https://${API_DOMAIN}/api/v1/auth/apple/callback" >> "$GITHUB_ENV"
           fi
@@ -97,6 +121,15 @@ jobs:
           SESSION_COOKIE_NAME=${SESSION_COOKIE_NAME}
           SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
           SESSION_DAYS=${SESSION_DAYS}
+          SMTP_HOST=${SMTP_HOST}
+          SMTP_PORT=${SMTP_PORT}
+          SMTP_USERNAME=${SMTP_USERNAME}
+          SMTP_PASSWORD=${SMTP_PASSWORD}
+          SMTP_SENDER_EMAIL=${SMTP_SENDER_EMAIL}
+          SMTP_SENDER_NAME=${SMTP_SENDER_NAME}
+          SMTP_STARTTLS=${SMTP_STARTTLS}
+          SMTP_USE_SSL=${SMTP_USE_SSL}
+          MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES}
           GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
           APPLE_SERVICE_ID=${APPLE_SERVICE_ID}
           APPLE_REDIRECT_URI=${APPLE_REDIRECT_URI}

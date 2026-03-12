@@ -537,11 +537,9 @@ html[data-theme="dark"] .official-material {
   justify-content: flex-end;
 }
 
-.social-slot {
+.auth-email-field {
   min-width: 280px;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
+  margin: 0;
 }
 
 .social-button {
@@ -966,7 +964,7 @@ input[type="number"] {
     grid-template-columns: 1fr;
   }
 
-  .social-slot,
+  .auth-email-field,
   .social-button {
     min-width: 0;
     width: 100%;

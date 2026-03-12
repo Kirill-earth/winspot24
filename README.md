@@ -63,29 +63,19 @@ apiBaseUrl: "http://localhost:8000/api/v1"
 - `GET /api/v1/round/{round_number}/shipping` — публичный delivery timeline.
 - `GET /api/v1/account/session` — текущая account-сессия и профиль.
 - `PUT /api/v1/account/profile` — сохранение профиля доставки и связанного кошелька.
-- `POST /api/v1/auth/google` — вход через Google ID token.
-- `GET /api/v1/auth/apple/start` — старт Sign in with Apple.
-- `POST /api/v1/auth/apple/callback` — callback Apple auth.
+- `POST /api/v1/auth/email/request` — отправка magic link на email.
+- `GET /api/v1/auth/email/verify` — вход по одноразовой ссылке из письма.
 - `POST /api/v1/auth/logout` — завершение account-сессии.
 
 ## Деплой
 
-### Frontend (GitHub Pages)
+### Frontend + Backend на AWS VPS
 
-Используются:
-- `.github/workflows/deploy-pages.yml`
-- `CNAME`
-
-### Backend
-
-GitHub Pages не исполняет API, поэтому backend нужно поднять отдельно:
-- VPS + reverse proxy (`api.winspot24.com`),
-- или managed runtime (Render/Fly.io/Cloud Run).
-
-Рекомендованная схема:
-1. `winspot24.com` -> GitHub Pages (frontend).
-2. `api.winspot24.com` -> backend.
-3. В `config.js` указать `apiBaseUrl: "https://api.winspot24.com/api/v1"`.
+Текущая схема:
+1. `winspot24.com` -> Caddy на VPS, который отдает статику сайта.
+2. `www.winspot24.com` -> редирект на `https://winspot24.com`.
+3. `api.winspot24.com` -> тот же Caddy, reverse proxy на FastAPI.
+4. В `config.js` используется `apiBaseUrl: "https://api.winspot24.com/api/v1"`.
 
 ### Backend через GitHub Actions (автодеплой на VPS)
 
@@ -95,7 +85,8 @@ GitHub Pages не исполняет API, поэтому backend нужно по
 Он запускается при пуше в `main` (когда меняется `backend/**` или `deploy/api/**`) и делает:
 1. Заливает `backend` и `deploy/api` на сервер.
 2. Поднимает `api + caddy` через Docker Compose.
-3. Выпускает/обновляет TLS сертификат для `api.winspot24.com`.
+3. Кладет статические файлы сайта в `deploy/site/public`.
+4. Выпускает/обновляет TLS сертификаты для `winspot24.com`, `www.winspot24.com`, `api.winspot24.com`.
 
 Нужно заполнить в GitHub (`Settings -> Secrets and variables -> Actions`):
 
@@ -110,28 +101,35 @@ Repository Variables:
 - `SESSION_COOKIE_NAME` — имя cookie, по умолчанию `winspot24_session`.
 - `SESSION_COOKIE_SECURE` — `true` для production.
 - `SESSION_DAYS` — TTL account-сессии в днях, по умолчанию `30`.
-- `GOOGLE_CLIENT_ID` — OAuth Client ID для Google Sign-In.
-- `APPLE_SERVICE_ID` — Service ID для Sign in with Apple.
-- `APPLE_REDIRECT_URI` — callback URL, по умолчанию `https://api.winspot24.com/api/v1/auth/apple/callback`.
+- `SMTP_HOST` — SMTP host для отправки magic links.
+- `SMTP_PORT` — SMTP port, обычно `587`.
+- `SMTP_SENDER_EMAIL` — email отправителя.
+- `SMTP_SENDER_NAME` — имя отправителя, по умолчанию `Winspot24`.
+- `SMTP_STARTTLS` — `true`, если нужен STARTTLS.
+- `SMTP_USE_SSL` — `true`, если нужен SMTPS вместо STARTTLS.
+- `MAGIC_LINK_TTL_MINUTES` — срок жизни одноразовой ссылки, по умолчанию `20`.
 
 Repository Secrets:
 - `VPS_SSH_KEY` — приватный SSH-ключ для входа на сервер.
 - `ETH_RPC_URL` — RPC URL Ethereum Mainnet.
+- `SMTP_USERNAME` — SMTP username.
+- `SMTP_PASSWORD` — SMTP password / app password.
 
 После этого любой push в `main` с изменениями backend автоматически задеплоит API.
 
 ### Что нужно для авторизации
 
-Google:
-- создать OAuth client в Google Cloud,
-- в `Authorized JavaScript origins` добавить `https://winspot24.com`,
-- в `GOOGLE_CLIENT_ID` записать выданный client ID.
+Для текущей версии используется только email magic link:
+- пользователь вводит email в личном кабинете,
+- backend отправляет одноразовую ссылку через SMTP,
+- после перехода по ссылке backend ставит cookie-сессию и возвращает пользователя в `#account`.
 
-Apple:
-- создать `Service ID`,
-- разрешить `https://winspot24.com`,
-- callback указать `https://api.winspot24.com/api/v1/auth/apple/callback`,
-- значения записать в `APPLE_SERVICE_ID` и `APPLE_REDIRECT_URI`.
+Минимум, который нужно заполнить для запуска:
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SENDER_EMAIL`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
 
 ## Ограничения и риски
 

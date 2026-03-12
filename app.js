@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   maxTicketsPerPurchase: 20,
   walletRequired: true,
   shippingStartDate: "2026-03-11",
+  emailAuthEnabled: false,
   googleClientId: "",
   googleAuthEnabled: false,
   appleAuthEnabled: false,
@@ -26,6 +27,7 @@ const storageKeys = {
   theme: "winspot24.theme.v2",
   language: "winspot24.language.v1",
   profileDraft: "winspot24.profile.v1",
+  authEmailDraft: "winspot24.auth-email.v1",
 };
 
 const LANGUAGE_OPTIONS = [
@@ -640,8 +642,8 @@ const ui = {
   accountEmail: document.getElementById("accountEmail"),
   accountAuthStatus: document.getElementById("accountAuthStatus"),
   accountAuthHint: document.getElementById("accountAuthHint"),
-  googleAuthMount: document.getElementById("googleAuthMount"),
-  appleAuthButton: document.getElementById("appleAuthButton"),
+  authEmailInput: document.getElementById("authEmailInput"),
+  emailAuthButton: document.getElementById("emailAuthButton"),
   accountLogoutButton: document.getElementById("accountLogoutButton"),
   accountSaveButton: document.getElementById("accountSaveButton"),
   accountSaveState: document.getElementById("accountSaveState"),
@@ -665,7 +667,7 @@ const state = {
   isBusy: false,
   session: null,
   profileDraft: { ...EMPTY_PROFILE },
-  googleScriptPromise: null,
+  authEmailDraft: "",
   accountBusy: false,
   accountNotice: "",
 };
@@ -906,6 +908,7 @@ function mergeBackendConfig(configPayload) {
       configPayload.max_tickets_per_purchase ?? state.config.maxTicketsPerPurchase
     ),
     shippingStartDate: configPayload.shipping_start_date ?? state.config.shippingStartDate,
+    emailAuthEnabled: Boolean(configPayload.email_auth_enabled ?? state.config.emailAuthEnabled),
     googleClientId: configPayload.google_client_id ?? state.config.googleClientId,
     googleAuthEnabled: Boolean(configPayload.google_auth_enabled ?? state.config.googleAuthEnabled),
     appleAuthEnabled: Boolean(configPayload.apple_auth_enabled ?? state.config.appleAuthEnabled),
@@ -974,6 +977,30 @@ function hydrateProfileForm() {
     ? mergedProfile(state.session.profile, state.profileDraft)
     : state.profileDraft;
   applyProfileToForm(preferredProfile);
+}
+
+function consumeAuthQueryStatus() {
+  const url = new URL(window.location.href);
+  const authState = url.searchParams.get("auth");
+  if (!authState) {
+    return;
+  }
+
+  if (authState === "email-verified") {
+    state.accountNotice = langText(
+      "Вход по email подтвержден. Теперь профиль можно сохранять в личном кабинете.",
+      "Email sign-in confirmed. You can now save your profile to your account."
+    );
+  } else if (authState === "email-invalid") {
+    state.accountNotice = langText(
+      "Ссылка для входа недействительна или уже истекла. Запроси новую.",
+      "This sign-in link is invalid or expired. Request a new one."
+    );
+  }
+
+  url.searchParams.delete("auth");
+  const cleaned = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, "", cleaned);
 }
 
 async function loadSession() {
@@ -1155,63 +1182,39 @@ function renderDelivery() {
   });
 }
 
-async function loadGoogleScript() {
-  if (!state.config.googleAuthEnabled || !state.config.googleClientId) {
-    return false;
-  }
-  if (window.google?.accounts?.id) {
-    return true;
-  }
-  if (state.googleScriptPromise) {
-    return state.googleScriptPromise;
-  }
-
-  state.googleScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-google-gsi="1"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(true), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Google script failed to load.")), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.dataset.googleGsi = "1";
-    script.onload = () => resolve(true);
-    script.onerror = () => reject(new Error("Google script failed to load."));
-    document.head.appendChild(script);
-  });
-
-  return state.googleScriptPromise;
-}
-
-async function onGoogleCredentialResponse(response) {
-  if (!response?.credential) {
+async function requestEmailMagicLink() {
+  const email = ui.authEmailInput.value.trim().toLowerCase();
+  if (!email) {
+    state.accountNotice = langText(
+      "Введи email, чтобы получить ссылку для входа.",
+      "Enter your email to receive a sign-in link."
+    );
+    renderAll();
     return;
   }
+
   state.accountBusy = true;
   state.accountNotice = "";
+  state.authEmailDraft = email;
+  writeStorage(storageKeys.authEmailDraft, state.authEmailDraft);
   renderAccount();
+
   try {
-    const sessionPayload = await apiRequest("/auth/google", {
+    const response = await apiRequest("/auth/email/request", {
       method: "POST",
-      body: JSON.stringify({ credential: response.credential }),
+      body: JSON.stringify({
+        email,
+        return_to: `${window.location.origin}${window.location.pathname}#account`,
+      }),
     });
-    state.session = sessionPayload.authenticated ? sessionPayload : null;
-    hydrateProfileForm();
     state.accountNotice = langText(
-      "Google-авторизация успешна. Профиль можно сохранять в кабинете.",
-      "Signed in with Google. You can now save your profile to your account."
+      `Ссылка для входа отправлена на ${response.email}. Проверь почту.`,
+      `A sign-in link was sent to ${response.email}. Check your inbox.`
     );
-    await refreshData();
   } catch (error) {
     state.accountNotice = langText(
-      `Google-вход не выполнен: ${error.message || String(error)}`,
-      `Google sign-in failed: ${error.message || String(error)}`
+      `Не удалось отправить письмо: ${error.message || String(error)}`,
+      `Could not send the email: ${error.message || String(error)}`
     );
   } finally {
     state.accountBusy = false;
@@ -1219,73 +1222,17 @@ async function onGoogleCredentialResponse(response) {
   }
 }
 
-async function renderGoogleButton() {
-  clearNode(ui.googleAuthMount);
-
-  if (state.session) {
-    ui.googleAuthMount.hidden = true;
-    return;
-  }
-
-  ui.googleAuthMount.hidden = false;
-
-  if (!state.config.googleAuthEnabled || !state.config.googleClientId) {
-    const note = document.createElement("div");
-    note.className = "social-disabled";
-    note.textContent = langText(
-      "Google-вход появится после добавления client ID в backend.",
-      "Google sign-in will appear after a client ID is configured on the backend."
-    );
-    ui.googleAuthMount.appendChild(note);
-    return;
-  }
-
-  try {
-    await loadGoogleScript();
-    if (!window.google?.accounts?.id) {
-      throw new Error("Google Identity Services is unavailable.");
-    }
-    window.google.accounts.id.initialize({
-      client_id: state.config.googleClientId,
-      callback: onGoogleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true,
-      use_fedcm_for_prompt: false,
-    });
-    window.google.accounts.id.renderButton(ui.googleAuthMount, {
-      theme: state.theme === "dark" ? "filled_black" : "outline",
-      size: "large",
-      shape: "pill",
-      text: "continue_with",
-      width: 280,
-      logo_alignment: "left",
-    });
-  } catch (error) {
-    const note = document.createElement("div");
-    note.className = "social-disabled";
-    note.textContent = langText(
-      `Google-вход недоступен: ${error.message || String(error)}`,
-      `Google sign-in is unavailable: ${error.message || String(error)}`
-    );
-    ui.googleAuthMount.appendChild(note);
-  }
-}
-
 function renderAccount() {
   const session = state.session;
   const linkedWallet = getLinkedWalletAddress();
-  const providerLabel = session?.user?.provider === "google"
-    ? "Google"
-    : session?.user?.provider === "apple"
-      ? "Apple"
-      : null;
+  const providerLabel = session?.user?.provider === "email" ? "Email" : "Email";
 
   ui.accountButton.textContent = langText("Личный кабинет", "Account");
-  ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || "Winspot24";
+  ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || session?.user?.email || "Winspot24";
   ui.accountEmail.textContent = session?.user?.email
     || langText(
-      "Войди через Google или Apple, чтобы сохранить профиль.",
-      "Sign in with Google or Apple to save your profile."
+      "Войди по email magic link, чтобы сохранить профиль.",
+      "Sign in with an email magic link to save your profile."
     );
   ui.accountAvatar.textContent = (session?.user?.full_name || session?.user?.email || "W").trim().slice(0, 1).toUpperCase();
 
@@ -1294,20 +1241,31 @@ function renderAccount() {
         `Вход выполнен через ${providerLabel}. Профиль и адрес можно хранить в кабинете.`,
         `Signed in with ${providerLabel}. Your profile and shipping details can be stored in your account.`
       )
-    : langText(
-        "Войди через Google или Apple, чтобы профиль доставки и привязанный кошелек сохранялись между устройствами.",
-        "Sign in with Google or Apple so your delivery profile and linked wallet are saved across devices."
+    : state.config.emailAuthEnabled
+      ? langText(
+        "Введи email и получи одноразовую ссылку. После перехода из письма вход выполнится без пароля.",
+        "Enter your email and get a one-time sign-in link. After opening it from your inbox, you will be signed in without a password."
+      )
+      : langText(
+        "Email-вход появится после настройки SMTP на backend. Пока профиль можно хранить только локально в этом браузере.",
+        "Email sign-in will appear after SMTP is configured on the backend. Until then, your profile can only be stored locally in this browser."
       );
 
   ui.accountAuthHint.textContent = state.accountNotice;
+  if (session?.user?.email) {
+    ui.authEmailInput.value = session.user.email;
+  } else if (!ui.authEmailInput.value) {
+    ui.authEmailInput.value = state.authEmailDraft || "";
+  }
+  ui.authEmailInput.disabled = state.accountBusy || Boolean(session);
+  ui.emailAuthButton.disabled = state.accountBusy || !state.config.emailAuthEnabled || Boolean(session);
   ui.accountLogoutButton.hidden = !session;
   ui.accountLogoutButton.disabled = state.accountBusy;
   ui.accountSaveButton.disabled = state.accountBusy;
   ui.accountSyncWalletButton.disabled = state.accountBusy || !state.walletAddress || linkedWallet === state.walletAddress;
-  ui.appleAuthButton.disabled = state.accountBusy || !state.config.appleAuthEnabled;
-  ui.appleAuthButton.textContent = state.config.appleAuthEnabled
-    ? "Continue with Apple"
-    : langText("Apple ID скоро", "Apple ID pending setup");
+  ui.emailAuthButton.textContent = state.config.emailAuthEnabled
+    ? langText("Отправить ссылку для входа", "Send sign-in link")
+    : langText("Email-вход скоро", "Email sign-in pending setup");
   ui.accountSaveButton.textContent = session
     ? langText("Сохранить профиль", "Save profile")
     : langText("Сохранить в этом браузере", "Save in this browser");
@@ -1324,8 +1282,6 @@ function renderAccount() {
   if (linkedWallet) {
     ui.walletStatus.textContent = shortAddress(linkedWallet);
   }
-
-  void renderGoogleButton();
 }
 
 function renderControls() {
@@ -1525,19 +1481,6 @@ async function logoutAccount() {
   }
 }
 
-function startAppleSignIn() {
-  if (!state.config.appleAuthEnabled) {
-    state.accountNotice = langText(
-      "Apple Sign In станет доступен после добавления Service ID и redirect URI на backend.",
-      "Apple Sign In will be available after a Service ID and redirect URI are configured on the backend."
-    );
-    renderAll();
-    return;
-  }
-  const returnTo = `${window.location.origin}${window.location.pathname}#account`;
-  window.location.href = `${apiRoot()}/api/v1/auth/apple/start?return_to=${encodeURIComponent(returnTo)}`;
-}
-
 async function buyTickets(event) {
   event.preventDefault();
   if (state.isBusy) {
@@ -1704,10 +1647,12 @@ async function bootstrap() {
   state.theme = resolveInitialTheme();
   state.language = resolveInitialLanguage();
   state.profileDraft = normalizeProfile(readStorage(storageKeys.profileDraft, EMPTY_PROFILE));
+  state.authEmailDraft = readStorage(storageKeys.authEmailDraft, "") || "";
 
   applyTheme();
   populateLanguageSelect();
   hydrateProfileForm();
+  ui.authEmailInput.value = state.authEmailDraft;
   applyStaticTranslations();
   renderAll();
 
@@ -1724,9 +1669,13 @@ async function bootstrap() {
       renderPurchaseHint();
     });
   });
+  ui.authEmailInput.addEventListener("input", () => {
+    state.authEmailDraft = ui.authEmailInput.value.trim();
+    writeStorage(storageKeys.authEmailDraft, state.authEmailDraft);
+  });
+  ui.emailAuthButton.addEventListener("click", requestEmailMagicLink);
   ui.accountSaveButton.addEventListener("click", saveProfile);
   ui.accountSyncWalletButton.addEventListener("click", syncWalletToAccount);
-  ui.appleAuthButton.addEventListener("click", startAppleSignIn);
   ui.accountLogoutButton.addEventListener("click", logoutAccount);
   setupWalletListeners();
   setupProfileDraftListeners();
@@ -1748,6 +1697,8 @@ async function bootstrap() {
       "Account session is unavailable right now. You can continue as a guest."
     );
   }
+
+  consumeAuthQueryStatus();
 
   try {
     await refreshData();

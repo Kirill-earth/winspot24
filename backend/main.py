@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import secrets
 import sqlite3
+import smtplib
+import ssl
 import urllib.parse
 from decimal import Decimal
+from email.message import EmailMessage
+from email.utils import formataddr
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +33,8 @@ GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys"
 APPLE_ISSUER = "https://appleid.apple.com"
 DEFAULT_SESSION_DAYS = 30
+DEFAULT_MAGIC_LINK_TTL_MINUTES = 20
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 APPLE_JWK_CLIENT = PyJWKClient(APPLE_JWKS_URL)
 
 
@@ -85,11 +92,22 @@ APP_ENV = {
   "session_cookie_name": os.getenv("SESSION_COOKIE_NAME", "winspot24_session").strip() or "winspot24_session",
   "session_cookie_secure": parse_bool_env(os.getenv("SESSION_COOKIE_SECURE"), True),
   "session_days": int(os.getenv("SESSION_DAYS", str(DEFAULT_SESSION_DAYS))),
+  "api_domain": os.getenv("API_DOMAIN", "api.winspot24.com").strip() or "api.winspot24.com",
+  "smtp_host": os.getenv("SMTP_HOST", "").strip(),
+  "smtp_port": int(os.getenv("SMTP_PORT", "587")),
+  "smtp_username": os.getenv("SMTP_USERNAME", "").strip(),
+  "smtp_password": os.getenv("SMTP_PASSWORD", ""),
+  "smtp_sender_email": os.getenv("SMTP_SENDER_EMAIL", "").strip(),
+  "smtp_sender_name": os.getenv("SMTP_SENDER_NAME", "Winspot24").strip() or "Winspot24",
+  "smtp_starttls": parse_bool_env(os.getenv("SMTP_STARTTLS"), True),
+  "smtp_use_ssl": parse_bool_env(os.getenv("SMTP_USE_SSL"), False),
+  "magic_link_ttl_minutes": int(os.getenv("MAGIC_LINK_TTL_MINUTES", str(DEFAULT_MAGIC_LINK_TTL_MINUTES))),
   "google_client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
   "apple_service_id": os.getenv("APPLE_SERVICE_ID", "").strip(),
   "apple_redirect_uri": os.getenv("APPLE_REDIRECT_URI", "https://api.winspot24.com/api/v1/auth/apple/callback").strip(),
 }
 APP_ENV["ticket_price_micro"] = int(APP_ENV["ticket_price_usdt"] * Decimal("1000000"))
+APP_ENV["email_auth_enabled"] = bool(APP_ENV["smtp_host"] and APP_ENV["smtp_sender_email"])
 APP_ENV["google_auth_enabled"] = bool(APP_ENV["google_client_id"])
 APP_ENV["apple_auth_enabled"] = bool(APP_ENV["apple_service_id"] and APP_ENV["apple_redirect_uri"])
 
@@ -132,6 +150,11 @@ class PurchasePayload(BaseModel):
 
 class GoogleAuthPayload(BaseModel):
   credential: str = Field(min_length=20)
+
+
+class EmailAuthRequestPayload(BaseModel):
+  email: str = Field(min_length=5, max_length=320)
+  return_to: str | None = Field(default=None, max_length=500)
 
 
 class AccountProfilePayload(BaseModel):
@@ -282,6 +305,19 @@ def init_db() -> None:
       )
       """
     )
+    conn.execute(
+      """
+      CREATE TABLE IF NOT EXISTS magic_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        return_to TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      )
+      """
+    )
 
 
 def normalize_address(value: str) -> str:
@@ -302,6 +338,13 @@ def normalize_hash(value: str) -> str:
   raw = (value or "").strip().lower()
   if not re.match(r"^0x[a-f0-9]{64}$", raw):
     raise HTTPException(status_code=400, detail="Invalid transaction hash.")
+  return raw
+
+
+def normalize_email(value: str) -> str:
+  raw = (value or "").strip().lower()
+  if not EMAIL_RE.match(raw):
+    raise HTTPException(status_code=400, detail="Invalid email address.")
   return raw
 
 
@@ -392,6 +435,26 @@ def trim_optional_text(value: str | None) -> str | None:
   return trimmed or None
 
 
+def mask_email(value: str) -> str:
+  local_part, domain_part = value.split("@", 1)
+  if len(local_part) <= 2:
+    masked_local = f"{local_part[:1]}***"
+  else:
+    masked_local = f"{local_part[:2]}***"
+  return f"{masked_local}@{domain_part}"
+
+
+def hash_magic_link_token(token: str) -> str:
+  return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def append_query_value(url: str, key: str, value: str) -> str:
+  parsed = urllib.parse.urlparse(url)
+  query_items = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+  query_items.append((key, value))
+  return urllib.parse.urlunparse(parsed._replace(query=urllib.parse.urlencode(query_items)))
+
+
 def empty_profile() -> dict[str, Any]:
   return {
     "full_name": None,
@@ -420,6 +483,87 @@ def serialize_profile_row(row: sqlite3.Row | None) -> dict[str, Any]:
   }
 
 
+def create_magic_link(conn: sqlite3.Connection, email: str, return_to: str) -> tuple[str, str]:
+  cleanup_auth_tables(conn)
+  token = secrets.token_urlsafe(32)
+  token_hash = hash_magic_link_token(token)
+  now = utc_now()
+  expires_at = now + dt.timedelta(minutes=APP_ENV["magic_link_ttl_minutes"])
+  conn.execute(
+    """
+    INSERT INTO magic_links (email, token_hash, return_to, created_at, expires_at, used_at)
+    VALUES (?, ?, ?, ?, ?, NULL)
+    """,
+    (email, token_hash, sanitize_return_to(return_to), now.isoformat(), expires_at.isoformat()),
+  )
+  return token, token_hash
+
+
+def consume_magic_link(conn: sqlite3.Connection, token: str) -> sqlite3.Row:
+  cleanup_auth_tables(conn)
+  row = conn.execute(
+    """
+    SELECT * FROM magic_links
+    WHERE token_hash = ? AND used_at IS NULL
+    LIMIT 1
+    """,
+    (hash_magic_link_token(token),),
+  ).fetchone()
+  if not row:
+    raise HTTPException(status_code=400, detail="Magic link is invalid or expired.")
+
+  expires_at = parse_iso_datetime(row["expires_at"])
+  if not expires_at or expires_at <= utc_now():
+    conn.execute("DELETE FROM magic_links WHERE id = ?", (row["id"],))
+    raise HTTPException(status_code=400, detail="Magic link is invalid or expired.")
+
+  conn.execute("UPDATE magic_links SET used_at = ? WHERE id = ?", (utc_now_iso(), row["id"]))
+  return row
+
+
+def send_magic_link_email(email: str, verify_url: str) -> None:
+  if not APP_ENV["email_auth_enabled"]:
+    raise HTTPException(status_code=503, detail="Email sign-in is not configured.")
+
+  message = EmailMessage()
+  message["Subject"] = "Your Winspot24 sign-in link"
+  message["From"] = formataddr((APP_ENV["smtp_sender_name"], APP_ENV["smtp_sender_email"]))
+  message["To"] = email
+
+  ttl_minutes = APP_ENV["magic_link_ttl_minutes"]
+  message.set_content(
+    "Use this one-time sign-in link for your Winspot24 account.\n\n"
+    f"{verify_url}\n\n"
+    f"The link expires in {ttl_minutes} minutes."
+  )
+  message.add_alternative(
+    "<p>Use this one-time sign-in link for your Winspot24 account.</p>"
+    f"<p><a href=\"{verify_url}\">Open your account</a></p>"
+    f"<p>This link expires in {ttl_minutes} minutes.</p>",
+    subtype="html",
+  )
+
+  try:
+    if APP_ENV["smtp_use_ssl"]:
+      client: smtplib.SMTP | smtplib.SMTP_SSL = smtplib.SMTP_SSL(
+        APP_ENV["smtp_host"],
+        APP_ENV["smtp_port"],
+        timeout=20,
+        context=ssl.create_default_context(),
+      )
+    else:
+      client = smtplib.SMTP(APP_ENV["smtp_host"], APP_ENV["smtp_port"], timeout=20)
+
+    with client:
+      if not APP_ENV["smtp_use_ssl"] and APP_ENV["smtp_starttls"]:
+        client.starttls(context=ssl.create_default_context())
+      if APP_ENV["smtp_username"]:
+        client.login(APP_ENV["smtp_username"], APP_ENV["smtp_password"])
+      client.send_message(message)
+  except Exception as exc:
+    raise HTTPException(status_code=502, detail=f"Failed to send sign-in email: {exc}") from exc
+
+
 def sanitize_return_to(value: str | None) -> str:
   fallback = f"{APP_ENV['app_url']}/#account"
   raw = (value or "").strip()
@@ -440,6 +584,7 @@ def cleanup_auth_tables(conn: sqlite3.Connection) -> None:
   fifteen_minutes_ago = (utc_now() - dt.timedelta(minutes=15)).isoformat()
   conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (now_iso,))
   conn.execute("DELETE FROM oauth_states WHERE created_at <= ?", (fifteen_minutes_ago,))
+  conn.execute("DELETE FROM magic_links WHERE expires_at <= ? OR used_at IS NOT NULL", (now_iso,))
 
 
 def get_current_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -975,6 +1120,7 @@ def public_config() -> dict[str, Any]:
     "total_tickets": APP_ENV["total_tickets"],
     "max_tickets_per_purchase": APP_ENV["max_tickets_per_purchase"],
     "shipping_start_date": APP_ENV["shipping_start_date"],
+    "email_auth_enabled": APP_ENV["email_auth_enabled"],
     "google_client_id": APP_ENV["google_client_id"] or None,
     "google_auth_enabled": APP_ENV["google_auth_enabled"],
     "apple_auth_enabled": APP_ENV["apple_auth_enabled"],
@@ -1003,6 +1149,56 @@ def update_account_profile(payload: AccountProfilePayload, request: Request) -> 
       )
       user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_row["id"],)).fetchone()
     return session_payload(user_row, profile_row)
+
+
+@app.post("/api/v1/auth/email/request")
+def request_email_sign_in(payload: EmailAuthRequestPayload, request: Request) -> dict[str, Any]:
+  if not APP_ENV["email_auth_enabled"]:
+    raise HTTPException(status_code=503, detail="Email sign-in is not configured.")
+
+  email = normalize_email(payload.email)
+  return_to = payload.return_to or f"{APP_ENV['app_url']}/#account"
+
+  with get_conn() as conn:
+    token, token_hash = create_magic_link(conn, email, return_to)
+    verify_url = f"{str(request.base_url).rstrip('/')}/api/v1/auth/email/verify?token={urllib.parse.quote(token)}"
+    try:
+      send_magic_link_email(email, verify_url)
+    except HTTPException:
+      conn.execute("DELETE FROM magic_links WHERE token_hash = ?", (token_hash,))
+      raise
+
+  return {
+    "ok": True,
+    "email": mask_email(email),
+    "ttl_minutes": APP_ENV["magic_link_ttl_minutes"],
+  }
+
+
+@app.get("/api/v1/auth/email/verify")
+def verify_email_sign_in(token: str) -> Response:
+  fallback_url = append_query_value(f"{APP_ENV['app_url']}/#account", "auth", "email-invalid")
+
+  try:
+    with get_conn() as conn:
+      row = consume_magic_link(conn, token)
+      user_row = upsert_user(
+        conn,
+        provider="email",
+        provider_subject=row["email"],
+        email=row["email"],
+        email_verified=True,
+        full_name=None,
+        avatar_url=None,
+      )
+      profile_row = get_profile_row(conn, user_row["id"])
+      session_token = create_session(conn, user_row["id"])
+      target_url = append_query_value(sanitize_return_to(row["return_to"]), "auth", "email-verified")
+      response = RedirectResponse(url=target_url, status_code=302)
+      set_session_cookie(response, session_token)
+      return response
+  except HTTPException:
+    return RedirectResponse(url=fallback_url, status_code=302)
 
 
 @app.post("/api/v1/auth/google")
