@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - index.html
+      - account.html
       - styles.css
       - app.js
       - config.js
@@ -146,7 +147,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy/site/public
-          cp index.html styles.css app.js config.js terms.html privacy.html refund.html eligibility.html deploy/site/public/
+          cp index.html account.html styles.css app.js config.js terms.html privacy.html refund.html eligibility.html deploy/site/public/
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
