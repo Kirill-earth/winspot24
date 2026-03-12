@@ -21,9 +21,11 @@ services:
     env_file:
       - ./.env
     ports:
+      - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../site/public:/srv/site:ro
       - caddy_data:/data
       - caddy_config:/config
 
