@@ -39,6 +39,7 @@ jobs:
       SMTP_STARTTLS: ${{ vars.SMTP_STARTTLS }}
       SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
       MAGIC_LINK_TTL_MINUTES: ${{ vars.MAGIC_LINK_TTL_MINUTES }}
+      EMAIL_AUTH_ENABLED: ${{ vars.EMAIL_AUTH_ENABLED }}
       GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
       APPLE_SERVICE_ID: ${{ vars.APPLE_SERVICE_ID }}
       APPLE_REDIRECT_URI: ${{ vars.APPLE_REDIRECT_URI }}
@@ -97,6 +98,9 @@ jobs:
           if [[ -z "${MAGIC_LINK_TTL_MINUTES}" ]]; then
             echo "MAGIC_LINK_TTL_MINUTES=20" >> "$GITHUB_ENV"
           fi
+          if [[ -z "${EMAIL_AUTH_ENABLED}" ]]; then
+            echo "EMAIL_AUTH_ENABLED=false" >> "$GITHUB_ENV"
+          fi
           if [[ -z "${APPLE_REDIRECT_URI}" ]]; then
             echo "APPLE_REDIRECT_URI=https://${API_DOMAIN}/api/v1/auth/apple/callback" >> "$GITHUB_ENV"
           fi
@@ -130,6 +134,7 @@ jobs:
           SMTP_STARTTLS=${SMTP_STARTTLS}
           SMTP_USE_SSL=${SMTP_USE_SSL}
           MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES}
+          EMAIL_AUTH_ENABLED=${EMAIL_AUTH_ENABLED}
           GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
           APPLE_SERVICE_ID=${APPLE_SERVICE_ID}
           APPLE_REDIRECT_URI=${APPLE_REDIRECT_URI}
