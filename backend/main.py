@@ -102,12 +102,15 @@ APP_ENV = {
   "smtp_starttls": parse_bool_env(os.getenv("SMTP_STARTTLS"), True),
   "smtp_use_ssl": parse_bool_env(os.getenv("SMTP_USE_SSL"), False),
   "magic_link_ttl_minutes": int(os.getenv("MAGIC_LINK_TTL_MINUTES", str(DEFAULT_MAGIC_LINK_TTL_MINUTES))),
+  "email_auth_enabled_flag": parse_bool_env(os.getenv("EMAIL_AUTH_ENABLED"), False),
   "google_client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
   "apple_service_id": os.getenv("APPLE_SERVICE_ID", "").strip(),
   "apple_redirect_uri": os.getenv("APPLE_REDIRECT_URI", "https://api.winspot24.com/api/v1/auth/apple/callback").strip(),
 }
 APP_ENV["ticket_price_micro"] = int(APP_ENV["ticket_price_usdt"] * Decimal("1000000"))
-APP_ENV["email_auth_enabled"] = bool(APP_ENV["smtp_host"] and APP_ENV["smtp_sender_email"])
+APP_ENV["email_auth_enabled"] = bool(
+  APP_ENV["email_auth_enabled_flag"] and APP_ENV["smtp_host"] and APP_ENV["smtp_sender_email"]
+)
 APP_ENV["google_auth_enabled"] = bool(APP_ENV["google_client_id"])
 APP_ENV["apple_auth_enabled"] = bool(APP_ENV["apple_service_id"] and APP_ENV["apple_redirect_uri"])
 
