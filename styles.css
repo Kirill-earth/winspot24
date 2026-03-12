@@ -207,6 +207,22 @@ a {
 .ghost-button {
   padding: 10px 14px;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.ghost-button[aria-current="page"] {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-strong) 90%, var(--accent) 10%);
 }
 
 .theme-button {
@@ -456,6 +472,74 @@ html[data-theme="dark"] .official-material {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
   gap: 16px;
+}
+
+.account-cta {
+  display: grid;
+}
+
+.account-cta-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.account-cta-panel h2 {
+  margin: 10px 0 0;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.account-cta-actions {
+  min-width: 280px;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.account-page-main {
+  display: grid;
+  gap: 16px;
+}
+
+.account-page-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(340px, 1.05fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.account-page-copy {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.account-page-copy h1 {
+  margin: 0;
+  font-size: clamp(2.7rem, 6vw, 4.6rem);
+  line-height: 0.92;
+  letter-spacing: -0.06em;
+}
+
+.account-round-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.account-round-head {
+  align-items: flex-start;
+}
+
+.account-round-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.account-public-meta,
+.account-draw-result {
+  margin-top: 0;
 }
 
 .account-shell {
@@ -906,7 +990,8 @@ input[type="number"] {
 @media (max-width: 980px) {
   .hero,
   .control-grid,
-  .account-grid {
+  .account-grid,
+  .account-page-hero {
     grid-template-columns: 1fr;
   }
 
@@ -937,6 +1022,7 @@ input[type="number"] {
   .header-actions,
   .account-shell-head,
   .account-auth-panel,
+  .account-cta-panel,
   .panel-head,
   .account-panel-head,
   .account-panel-actions,
@@ -966,6 +1052,11 @@ input[type="number"] {
 
   .auth-email-field,
   .social-button {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .account-cta-actions {
     min-width: 0;
     width: 100%;
   }
