@@ -108,6 +108,7 @@ Repository Variables:
 - `SMTP_STARTTLS` — `true`, если нужен STARTTLS.
 - `SMTP_USE_SSL` — `true`, если нужен SMTPS вместо STARTTLS.
 - `MAGIC_LINK_TTL_MINUTES` — срок жизни одноразовой ссылки, по умолчанию `20`.
+- `EMAIL_AUTH_ENABLED` — `true`, только когда SES уже верифицирован и готов к бою.
 
 Repository Secrets:
 - `VPS_SSH_KEY` — приватный SSH-ключ для входа на сервер.
@@ -130,6 +131,7 @@ Repository Secrets:
 - `SMTP_SENDER_EMAIL`
 - `SMTP_USERNAME`
 - `SMTP_PASSWORD`
+- `EMAIL_AUTH_ENABLED=true`
 
 ## Ограничения и риски
 
