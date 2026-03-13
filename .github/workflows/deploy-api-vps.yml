@@ -41,6 +41,9 @@ jobs:
       SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
       MAGIC_LINK_TTL_MINUTES: ${{ vars.MAGIC_LINK_TTL_MINUTES }}
       EMAIL_AUTH_ENABLED: ${{ vars.EMAIL_AUTH_ENABLED }}
+      SES_REGION: ${{ vars.SES_REGION }}
+      SES_IDENTITY_AWS_ACCESS_KEY_ID: ${{ vars.SES_IDENTITY_AWS_ACCESS_KEY_ID }}
+      SES_IDENTITY_AWS_SECRET_ACCESS_KEY_VAR: ${{ vars.SES_IDENTITY_AWS_SECRET_ACCESS_KEY }}
       SMTP_USERNAME_VAR: ${{ vars.SMTP_USERNAME }}
       SMTP_PASSWORD_VAR: ${{ vars.SMTP_PASSWORD }}
       GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -49,6 +52,7 @@ jobs:
       ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
       SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SES_IDENTITY_AWS_SECRET_ACCESS_KEY: ${{ secrets.SES_IDENTITY_AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,11 +108,17 @@ jobs:
           if [[ -z "${EMAIL_AUTH_ENABLED}" ]]; then
             echo "EMAIL_AUTH_ENABLED=false" >> "$GITHUB_ENV"
           fi
+          if [[ -z "${SES_REGION}" ]]; then
+            echo "SES_REGION=eu-north-1" >> "$GITHUB_ENV"
+          fi
           if [[ -z "${SMTP_USERNAME}" && -n "${SMTP_USERNAME_VAR}" ]]; then
             echo "SMTP_USERNAME=${SMTP_USERNAME_VAR}" >> "$GITHUB_ENV"
           fi
           if [[ -z "${SMTP_PASSWORD}" && -n "${SMTP_PASSWORD_VAR}" ]]; then
             echo "SMTP_PASSWORD=${SMTP_PASSWORD_VAR}" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SES_IDENTITY_AWS_SECRET_ACCESS_KEY}" && -n "${SES_IDENTITY_AWS_SECRET_ACCESS_KEY_VAR}" ]]; then
+            echo "SES_IDENTITY_AWS_SECRET_ACCESS_KEY=${SES_IDENTITY_AWS_SECRET_ACCESS_KEY_VAR}" >> "$GITHUB_ENV"
           fi
           if [[ -z "${APPLE_REDIRECT_URI}" ]]; then
             echo "APPLE_REDIRECT_URI=https://${API_DOMAIN}/api/v1/auth/apple/callback" >> "$GITHUB_ENV"
@@ -144,6 +154,9 @@ jobs:
           SMTP_USE_SSL=${SMTP_USE_SSL}
           MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES}
           EMAIL_AUTH_ENABLED=${EMAIL_AUTH_ENABLED}
+          SES_REGION=${SES_REGION}
+          SES_IDENTITY_AWS_ACCESS_KEY_ID=${SES_IDENTITY_AWS_ACCESS_KEY_ID}
+          SES_IDENTITY_AWS_SECRET_ACCESS_KEY=${SES_IDENTITY_AWS_SECRET_ACCESS_KEY}
           GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
           APPLE_SERVICE_ID=${APPLE_SERVICE_ID}
           APPLE_REDIRECT_URI=${APPLE_REDIRECT_URI}
