@@ -41,6 +41,8 @@ jobs:
       SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
       MAGIC_LINK_TTL_MINUTES: ${{ vars.MAGIC_LINK_TTL_MINUTES }}
       EMAIL_AUTH_ENABLED: ${{ vars.EMAIL_AUTH_ENABLED }}
+      SMTP_USERNAME_VAR: ${{ vars.SMTP_USERNAME }}
+      SMTP_PASSWORD_VAR: ${{ vars.SMTP_PASSWORD }}
       GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
       APPLE_SERVICE_ID: ${{ vars.APPLE_SERVICE_ID }}
       APPLE_REDIRECT_URI: ${{ vars.APPLE_REDIRECT_URI }}
@@ -101,6 +103,12 @@ jobs:
           fi
           if [[ -z "${EMAIL_AUTH_ENABLED}" ]]; then
             echo "EMAIL_AUTH_ENABLED=false" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SMTP_USERNAME}" && -n "${SMTP_USERNAME_VAR}" ]]; then
+            echo "SMTP_USERNAME=${SMTP_USERNAME_VAR}" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${SMTP_PASSWORD}" && -n "${SMTP_PASSWORD_VAR}" ]]; then
+            echo "SMTP_PASSWORD=${SMTP_PASSWORD_VAR}" >> "$GITHUB_ENV"
           fi
           if [[ -z "${APPLE_REDIRECT_URI}" ]]; then
             echo "APPLE_REDIRECT_URI=https://${API_DOMAIN}/api/v1/auth/apple/callback" >> "$GITHUB_ENV"
