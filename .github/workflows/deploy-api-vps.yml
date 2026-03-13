@@ -19,6 +19,10 @@ on:
       - .github/workflows/deploy-api-vps.yml
   workflow_dispatch:
 
+concurrency:
+  group: deploy-api-vps
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
