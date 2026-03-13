@@ -621,7 +621,11 @@ def request_email_identity_verification(email: str) -> dict[str, str]:
   if current_status == "SUCCESS":
     return {"status": "verified"}
   if current_status in {"PENDING", "TEMPORARY_FAILURE"}:
-    return {"status": "pending"}
+    try:
+      client.delete_email_identity(EmailIdentity=email)
+    except ClientError as exc:
+      if exc.response.get("Error", {}).get("Code") not in {"NotFoundException", "ResourceNotFoundException"}:
+        raise HTTPException(status_code=502, detail=f"Could not refresh email verification: {exc}") from exc
 
   try:
     client.create_email_identity(EmailIdentity=email)
