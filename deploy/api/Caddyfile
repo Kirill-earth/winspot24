@@ -20,6 +20,8 @@ winspot24.com {
   import security_headers
   encode zstd gzip
   root * /srv/site
+  @account path /account
+  rewrite @account /account.html
   file_server
 }
 
