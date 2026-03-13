@@ -16,8 +16,10 @@ from email.utils import formataddr
 from pathlib import Path
 from typing import Any
 
+import boto3
 import jwt
 import requests
+from botocore.exceptions import ClientError
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -36,6 +38,7 @@ DEFAULT_SESSION_DAYS = 30
 DEFAULT_MAGIC_LINK_TTL_MINUTES = 20
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 APPLE_JWK_CLIENT = PyJWKClient(APPLE_JWKS_URL)
+SES_IDENTITY_CLIENT = None
 
 
 def utc_now() -> dt.datetime:
@@ -103,6 +106,9 @@ APP_ENV = {
   "smtp_use_ssl": parse_bool_env(os.getenv("SMTP_USE_SSL"), False),
   "magic_link_ttl_minutes": int(os.getenv("MAGIC_LINK_TTL_MINUTES", str(DEFAULT_MAGIC_LINK_TTL_MINUTES))),
   "email_auth_enabled_flag": parse_bool_env(os.getenv("EMAIL_AUTH_ENABLED"), False),
+  "ses_region": os.getenv("SES_REGION", os.getenv("AWS_REGION", "eu-north-1")).strip() or "eu-north-1",
+  "ses_identity_access_key_id": os.getenv("SES_IDENTITY_AWS_ACCESS_KEY_ID", "").strip(),
+  "ses_identity_secret_access_key": os.getenv("SES_IDENTITY_AWS_SECRET_ACCESS_KEY", ""),
   "google_client_id": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
   "apple_service_id": os.getenv("APPLE_SERVICE_ID", "").strip(),
   "apple_redirect_uri": os.getenv("APPLE_REDIRECT_URI", "https://api.winspot24.com/api/v1/auth/apple/callback").strip(),
@@ -113,6 +119,9 @@ APP_ENV["email_auth_enabled"] = bool(
 )
 APP_ENV["google_auth_enabled"] = bool(APP_ENV["google_client_id"])
 APP_ENV["apple_auth_enabled"] = bool(APP_ENV["apple_service_id"] and APP_ENV["apple_redirect_uri"])
+APP_ENV["email_verification_enabled"] = bool(
+  APP_ENV["ses_identity_access_key_id"] and APP_ENV["ses_identity_secret_access_key"]
+)
 
 if not HEX_ADDRESS_RE.match(APP_ENV["treasury_address"]):
   raise RuntimeError("Invalid TREASURY_ADDRESS")
@@ -160,6 +169,10 @@ class EmailAuthRequestPayload(BaseModel):
   return_to: str | None = Field(default=None, max_length=500)
 
 
+class EmailVerificationRequestPayload(BaseModel):
+  email: str = Field(min_length=5, max_length=320)
+
+
 class AccountProfilePayload(BaseModel):
   full_name: str | None = Field(default=None, max_length=120)
   phone: str | None = Field(default=None, max_length=40)
@@ -177,6 +190,20 @@ def get_conn() -> sqlite3.Connection:
   conn.execute("PRAGMA foreign_keys = ON")
   conn.execute("PRAGMA journal_mode = WAL")
   return conn
+
+
+def get_ses_identity_client():
+  global SES_IDENTITY_CLIENT
+  if SES_IDENTITY_CLIENT is None:
+    if not APP_ENV["email_verification_enabled"]:
+      raise HTTPException(status_code=503, detail="Email verification is not configured.")
+    SES_IDENTITY_CLIENT = boto3.client(
+      "sesv2",
+      region_name=APP_ENV["ses_region"],
+      aws_access_key_id=APP_ENV["ses_identity_access_key_id"],
+      aws_secret_access_key=APP_ENV["ses_identity_secret_access_key"],
+    )
+  return SES_IDENTITY_CLIENT
 
 
 def init_db() -> None:
@@ -563,8 +590,49 @@ def send_magic_link_email(email: str, verify_url: str) -> None:
       if APP_ENV["smtp_username"]:
         client.login(APP_ENV["smtp_username"], APP_ENV["smtp_password"])
       client.send_message(message)
+  except (smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError) as exc:
+    raw_message = str(exc)
+    if "not verified" in raw_message.lower():
+      raise HTTPException(
+        status_code=409,
+        detail=(
+          "This email must be verified once before Winspot24 can send a sign-in link. "
+          "Use the verification step first, then request the magic link again."
+        ),
+      ) from exc
+    raise HTTPException(status_code=502, detail=f"Failed to send sign-in email: {raw_message}") from exc
   except Exception as exc:
     raise HTTPException(status_code=502, detail=f"Failed to send sign-in email: {exc}") from exc
+
+
+def request_email_identity_verification(email: str) -> dict[str, str]:
+  client = get_ses_identity_client()
+
+  def get_status() -> str | None:
+    try:
+      response = client.get_email_identity(EmailIdentity=email)
+      return response.get("VerificationStatus")
+    except ClientError as exc:
+      if exc.response.get("Error", {}).get("Code") in {"NotFoundException", "ResourceNotFoundException"}:
+        return None
+      raise
+
+  current_status = get_status()
+  if current_status == "SUCCESS":
+    return {"status": "verified"}
+  if current_status in {"PENDING", "TEMPORARY_FAILURE"}:
+    return {"status": "pending"}
+
+  try:
+    client.create_email_identity(EmailIdentity=email)
+  except ClientError as exc:
+    if exc.response.get("Error", {}).get("Code") not in {"AlreadyExistsException"}:
+      raise HTTPException(status_code=502, detail=f"Could not start email verification: {exc}") from exc
+
+  refreshed_status = get_status()
+  if refreshed_status == "SUCCESS":
+    return {"status": "verified"}
+  return {"status": "verification_sent"}
 
 
 def sanitize_return_to(value: str | None) -> str:
@@ -1124,6 +1192,7 @@ def public_config() -> dict[str, Any]:
     "max_tickets_per_purchase": APP_ENV["max_tickets_per_purchase"],
     "shipping_start_date": APP_ENV["shipping_start_date"],
     "email_auth_enabled": APP_ENV["email_auth_enabled"],
+    "email_verification_enabled": APP_ENV["email_verification_enabled"],
     "google_client_id": APP_ENV["google_client_id"] or None,
     "google_auth_enabled": APP_ENV["google_auth_enabled"],
     "apple_auth_enabled": APP_ENV["apple_auth_enabled"],
@@ -1152,6 +1221,17 @@ def update_account_profile(payload: AccountProfilePayload, request: Request) -> 
       )
       user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_row["id"],)).fetchone()
     return session_payload(user_row, profile_row)
+
+
+@app.post("/api/v1/auth/email/verification/request")
+def request_email_verification(payload: EmailVerificationRequestPayload) -> dict[str, Any]:
+  email = normalize_email(payload.email)
+  result = request_email_identity_verification(email)
+  return {
+    "ok": True,
+    "email": mask_email(email),
+    "status": result["status"],
+  }
 
 
 @app.post("/api/v1/auth/email/request")
