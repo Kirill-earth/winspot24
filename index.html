@@ -89,7 +89,7 @@
           <h2 data-i18n="purchase_title">Покупка билетов</h2>
           <p class="panel-copy">
             Выбери количество, подключи кошелек и оплати в <strong>USDT ERC-20</strong>.
-            Адрес доставки и все пользовательские данные теперь хранятся в личном кабинете.
+            Адрес доставки и все пользовательские данные хранятся в кабинете, который открывается после входа через popup.
           </p>
 
           <form id="purchaseForm" class="purchase-form">
@@ -111,7 +111,7 @@
             <p class="hint" id="purchaseHint">Итог: $10 USDT</p>
             <p class="hint secondary">Шанс при этой покупке: <span id="buyChance">~1%</span></p>
             <p class="hint secondary">Осталось билетов: <span id="remainingInline">100</span></p>
-            <p class="hint secondary">Заполни адрес доставки и авторизацию на отдельной странице личного кабинета.</p>
+            <p class="hint secondary">Перед покупкой войди через popup и заполни профиль на отдельной странице кабинета.</p>
           </form>
         </article>
 
@@ -151,19 +151,45 @@
         <article class="panel account-cta-panel">
           <div>
             <p class="eyebrow">ACCOUNT</p>
-            <h2>Личный кабинет теперь отдельно</h2>
+            <h2>Кабинет открывается отдельно</h2>
             <p class="panel-copy">
-              Авторизация, адрес доставки, привязка кошелька, билеты и история раундов вынесены на отдельную страницу,
-              чтобы главная оставалась максимально чистой и сфокусированной на покупке.
+              Вход происходит через popup без пароля, а профиль, доставка, билеты и история живут на отдельной странице
+              кабинета.
             </p>
           </div>
           <div class="account-cta-actions">
-            <a class="primary-button" href="/account">Открыть личный кабинет</a>
-            <p class="hint secondary">Перед покупкой проверь, что профиль и адрес доставки заполнены в кабинете.</p>
+            <button id="accountCtaButton" class="primary-button" type="button">Войти и открыть кабинет</button>
+            <a class="ghost-button" href="/account">Страница кабинета</a>
           </div>
         </article>
       </section>
     </main>
+
+    <div id="authModal" class="auth-modal" hidden aria-hidden="true">
+      <div id="authModalBackdrop" class="auth-modal-backdrop"></div>
+      <div class="auth-modal-dialog panel" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+        <button id="authModalClose" class="ghost-button auth-modal-close" type="button" aria-label="Close login popup">
+          Close
+        </button>
+        <div class="auth-modal-copy">
+          <p class="eyebrow">ACCOUNT</p>
+          <h2 id="authModalTitle">Вход в личный кабинет</h2>
+          <p id="accountAuthStatus" class="panel-copy">
+            Введи email. Для нового адреса сначала отправим письмо подтверждения, затем magic link для входа.
+          </p>
+          <p id="accountAuthHint" class="hint secondary"></p>
+        </div>
+        <label class="field-label auth-email-field auth-modal-field">
+          <span>Email</span>
+          <input id="authEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com" />
+        </label>
+        <div class="auth-modal-actions">
+          <button id="emailAuthButton" class="primary-button social-button" type="button">Send sign-in link</button>
+          <button id="emailVerifyButton" class="ghost-button" type="button">Verify email first</button>
+        </div>
+        <p class="hint secondary">После входа откроется отдельная страница кабинета.</p>
+      </div>
+    </div>
 
     <footer class="site-footer">
       <div class="footer-links">

@@ -71,6 +71,14 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+body.auth-modal-open {
+  overflow: hidden;
+}
+
+[hidden] {
+  display: none !important;
+}
+
 button,
 input,
 select {
@@ -554,6 +562,14 @@ html[data-theme="dark"] .official-material {
   gap: 16px;
 }
 
+.account-shell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .account-shell-head h2 {
   margin: 10px 0 0;
   font-size: clamp(2rem, 4vw, 3rem);
@@ -598,27 +614,18 @@ html[data-theme="dark"] .official-material {
   font-weight: 700;
 }
 
-.account-auth-panel {
+.account-gate-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 20px;
 }
 
-.account-auth-copy {
-  max-width: 620px;
-}
-
-.account-auth-copy h3 {
-  margin-bottom: 8px;
-}
-
-.account-auth-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+.account-gate-actions {
+  min-width: 260px;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
 }
 
 .auth-email-field {
@@ -677,6 +684,55 @@ html[data-theme="dark"] .official-material {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
+}
+
+.auth-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 11, 18, 0.48);
+  backdrop-filter: blur(18px);
+}
+
+.auth-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(560px, 100%);
+  display: grid;
+  gap: 16px;
+  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
+  box-shadow: var(--shadow-main);
+}
+
+.auth-modal-copy h2 {
+  margin: 8px 0 0;
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.auth-modal-field {
+  width: 100%;
+}
+
+.auth-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-modal-close {
+  justify-self: end;
+  min-width: 0;
 }
 
 .panel {
@@ -1021,11 +1077,13 @@ input[type="number"] {
 
   .header-actions,
   .account-shell-head,
-  .account-auth-panel,
+  .account-shell-actions,
+  .account-gate-panel,
   .account-cta-panel,
   .panel-head,
   .account-panel-head,
   .account-panel-actions,
+  .auth-modal-actions,
   .control-row,
   .progress-header {
     flex-direction: column;
@@ -1061,9 +1119,18 @@ input[type="number"] {
     width: 100%;
   }
 
+  .account-gate-actions {
+    min-width: 0;
+    width: 100%;
+  }
+
   .account-identity {
     min-width: 0;
     width: 100%;
+  }
+
+  .auth-modal {
+    padding: 14px;
   }
 
   .official-material img {

@@ -110,35 +110,35 @@
               Все персональные данные участника собраны в одном месте, отдельно от витрины розыгрыша.
             </p>
           </div>
-          <div class="account-identity" id="accountIdentity">
-            <div class="account-avatar" id="accountAvatar">W</div>
-            <div>
-              <strong id="accountName">Guest</strong>
-              <p id="accountEmail">Войди по email magic link, чтобы сохранить профиль.</p>
+          <div class="account-shell-actions">
+            <div class="account-identity" id="accountIdentity">
+              <div class="account-avatar" id="accountAvatar">W</div>
+              <div>
+                <strong id="accountName">Guest</strong>
+                <p id="accountEmail">Войди через popup, чтобы открыть личный кабинет.</p>
+              </div>
             </div>
-          </div>
-        </div>
-
-        <div class="panel account-auth-panel">
-          <div class="account-auth-copy">
-            <h3>Авторизация</h3>
-            <p id="accountAuthStatus" class="panel-copy">
-              Введи email. Мы отправим одноразовую ссылку для входа без пароля.
-            </p>
-            <p id="accountAuthHint" class="hint secondary"></p>
-          </div>
-          <div class="account-auth-actions">
-            <label class="field-label auth-email-field">
-              <span>Email</span>
-              <input id="authEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com" />
-            </label>
-            <button id="emailAuthButton" class="ghost-button social-button" type="button">Send sign-in link</button>
-            <button id="emailVerifyButton" class="ghost-button" type="button">Verify email first</button>
             <button id="accountLogoutButton" class="ghost-button" type="button">Log out</button>
           </div>
         </div>
 
-        <div class="account-grid">
+        <div id="accountGate" class="panel account-gate-panel">
+          <div>
+            <p class="eyebrow">LOGIN</p>
+            <h3>Сначала вход, потом кабинет</h3>
+            <p class="panel-copy">
+              Кабинет открывается только после входа через popup. После авторизации эта страница покажет профиль,
+              доставку, кошелек, билеты и историю.
+            </p>
+            <p class="hint secondary">Magic link всегда ведет обратно на эту страницу.</p>
+          </div>
+          <div class="account-gate-actions">
+            <button id="accountLoginButton" class="primary-button" type="button">Войти по email</button>
+            <a class="ghost-button" href="/#round">Вернуться к розыгрышу</a>
+          </div>
+        </div>
+
+        <div id="accountContent" class="account-grid" hidden>
           <article class="panel account-profile-panel">
             <div class="panel-head account-panel-head">
               <div>
@@ -221,6 +221,32 @@
         </div>
       </section>
     </main>
+
+    <div id="authModal" class="auth-modal" hidden aria-hidden="true">
+      <div id="authModalBackdrop" class="auth-modal-backdrop"></div>
+      <div class="auth-modal-dialog panel" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+        <button id="authModalClose" class="ghost-button auth-modal-close" type="button" aria-label="Close login popup">
+          Close
+        </button>
+        <div class="auth-modal-copy">
+          <p class="eyebrow">ACCOUNT</p>
+          <h2 id="authModalTitle">Вход в личный кабинет</h2>
+          <p id="accountAuthStatus" class="panel-copy">
+            Введи email. Для нового адреса сначала отправим письмо подтверждения, затем magic link для входа.
+          </p>
+          <p id="accountAuthHint" class="hint secondary"></p>
+        </div>
+        <label class="field-label auth-email-field auth-modal-field">
+          <span>Email</span>
+          <input id="authEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="name@example.com" />
+        </label>
+        <div class="auth-modal-actions">
+          <button id="emailAuthButton" class="primary-button social-button" type="button">Send sign-in link</button>
+          <button id="emailVerifyButton" class="ghost-button" type="button">Verify email first</button>
+        </div>
+        <p class="hint secondary">После входа popup закроется, а кабинет откроется на этой странице.</p>
+      </div>
+    </div>
 
     <footer class="site-footer">
       <div class="footer-links">

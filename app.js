@@ -596,6 +596,7 @@ const ui = {
   themeToggle: document.getElementById("themeToggle"),
   walletButton: document.getElementById("walletButton"),
   accountButton: document.getElementById("accountButton"),
+  accountCtaButton: document.getElementById("accountCtaButton"),
   roundStatus: document.getElementById("roundStatus"),
   heroTitle: document.getElementById("heroTitle"),
   heroNote: document.getElementById("heroNote"),
@@ -637,10 +638,16 @@ const ui = {
   shippingAddressLine2: document.getElementById("shippingAddressLine2"),
   shippingPostalCode: document.getElementById("shippingPostalCode"),
   accountSection: document.getElementById("account"),
+  accountGate: document.getElementById("accountGate"),
+  accountContent: document.getElementById("accountContent"),
+  accountLoginButton: document.getElementById("accountLoginButton"),
   accountIdentity: document.getElementById("accountIdentity"),
   accountAvatar: document.getElementById("accountAvatar"),
   accountName: document.getElementById("accountName"),
   accountEmail: document.getElementById("accountEmail"),
+  authModal: document.getElementById("authModal"),
+  authModalBackdrop: document.getElementById("authModalBackdrop"),
+  authModalClose: document.getElementById("authModalClose"),
   accountAuthStatus: document.getElementById("accountAuthStatus"),
   accountAuthHint: document.getElementById("accountAuthHint"),
   authEmailInput: document.getElementById("authEmailInput"),
@@ -672,6 +679,7 @@ const state = {
   authEmailDraft: "",
   accountBusy: false,
   accountNotice: "",
+  authModalOpen: false,
 };
 const currentPage = document.body?.dataset?.page || "home";
 
@@ -1048,6 +1056,32 @@ async function loadSession() {
   hydrateProfileForm();
 }
 
+function openAuthModal() {
+  if (!ui.authModal || state.session) {
+    return;
+  }
+  state.authModalOpen = true;
+  ui.authModal.hidden = false;
+  ui.authModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("auth-modal-open");
+  window.setTimeout(() => {
+    if (ui.authEmailInput && !state.session) {
+      ui.authEmailInput.focus();
+      ui.authEmailInput.select();
+    }
+  }, 30);
+}
+
+function closeAuthModal() {
+  if (!ui.authModal) {
+    return;
+  }
+  state.authModalOpen = false;
+  ui.authModal.hidden = true;
+  ui.authModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("auth-modal-open");
+}
+
 async function refreshData() {
   const linkedWallet = getLinkedWalletAddress();
   const walletQuery = linkedWallet ? `?wallet=${encodeURIComponent(linkedWallet)}` : "";
@@ -1292,7 +1326,7 @@ async function requestEmailMagicLink() {
       method: "POST",
       body: JSON.stringify({
         email,
-        return_to: `${window.location.origin}${window.location.pathname}#account`,
+        return_to: `${window.location.origin}/account#account`,
       }),
     });
     state.accountNotice = langText(
@@ -1368,77 +1402,125 @@ async function requestEmailVerification() {
 function renderAccount() {
   const session = state.session;
   const linkedWallet = getLinkedWalletAddress();
-  const providerLabel = session?.user?.provider === "email" ? "Email" : "Email";
-
-  if (ui.accountButton) {
-    ui.accountButton.textContent = langText("Личный кабинет", "Account");
-  }
-  if (!ui.accountName || !ui.accountEmail || !ui.accountAvatar || !ui.accountAuthStatus || !ui.accountAuthHint) {
-    return;
-  }
-  ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || session?.user?.email || "Winspot24";
-  ui.accountEmail.textContent = session?.user?.email
-    || langText(
-      "Войди по email magic link, чтобы сохранить профиль.",
-      "Sign in with an email magic link to save your profile."
-    );
-  ui.accountAvatar.textContent = (session?.user?.full_name || session?.user?.email || "W").trim().slice(0, 1).toUpperCase();
-
-  ui.accountAuthStatus.textContent = session
+  const providerLabel = "Email";
+  const authStatusText = session
     ? langText(
-        `Вход выполнен через ${providerLabel}. Профиль и адрес можно хранить в кабинете.`,
-        `Signed in with ${providerLabel}. Your profile and shipping details can be stored in your account.`
+        `Вход выполнен через ${providerLabel}. Теперь можно открыть кабинет и сохранить профиль.`,
+        `Signed in with ${providerLabel}. You can now open your account and save your profile.`
       )
     : state.config.emailAuthEnabled
       ? state.config.emailVerificationEnabled
         ? langText(
-          "Введи email. Если адрес новый, сначала подтверди его через AWS, затем запроси одноразовую ссылку для входа без пароля.",
-          "Enter your email. If the address is new, verify it once with AWS first, then request your one-time passwordless sign-in link."
-        )
+            "Введи email. Для нового адреса сначала подтверди его через AWS, затем запроси magic link для входа.",
+            "Enter your email. For a new address, verify it with AWS first, then request your magic sign-in link."
+          )
         : langText(
-          "Введи email и получи одноразовую ссылку. После перехода из письма вход выполнится без пароля.",
-          "Enter your email and get a one-time sign-in link. After opening it from your inbox, you will be signed in without a password."
-        )
+            "Введи email и получи одноразовую ссылку для входа без пароля.",
+            "Enter your email and get a one-time passwordless sign-in link."
+          )
       : langText(
-        "Email-вход появится после настройки SMTP на backend. Пока профиль можно хранить только локально в этом браузере.",
-        "Email sign-in will appear after SMTP is configured on the backend. Until then, your profile can only be stored locally in this browser."
-      );
+          "Email-вход ещё не включен на backend.",
+          "Email sign-in is not enabled on the backend yet."
+        );
 
-  ui.accountAuthHint.textContent = state.accountNotice;
-  if (session?.user?.email) {
-    ui.authEmailInput.value = session.user.email;
-  } else if (!ui.authEmailInput.value) {
-    ui.authEmailInput.value = state.authEmailDraft || "";
+  if (session && state.authModalOpen) {
+    closeAuthModal();
   }
-  ui.authEmailInput.disabled = state.accountBusy || Boolean(session);
-  ui.emailAuthButton.disabled = state.accountBusy || !state.config.emailAuthEnabled || Boolean(session);
+
+  if (ui.accountButton) {
+    ui.accountButton.textContent = session
+      ? langText("Кабинет", "Account")
+      : langText("Войти", "Sign in");
+  }
+  if (ui.accountCtaButton) {
+    ui.accountCtaButton.textContent = session
+      ? langText("Открыть кабинет", "Open account")
+      : langText("Войти и открыть кабинет", "Sign in to open account");
+  }
+  if (ui.accountLoginButton) {
+    ui.accountLoginButton.textContent = langText("Войти по email", "Sign in with email");
+  }
+  if (ui.authModalClose) {
+    ui.authModalClose.textContent = langText("Закрыть", "Close");
+  }
+
+  if (ui.accountName) {
+    ui.accountName.textContent = session?.user?.full_name || session?.profile?.full_name || session?.user?.email || "Winspot24";
+  }
+  if (ui.accountEmail) {
+    ui.accountEmail.textContent = session?.user?.email
+      || langText(
+        "Войди через popup, чтобы открыть кабинет.",
+        "Sign in through the popup to unlock your account."
+      );
+  }
+  if (ui.accountAvatar) {
+    ui.accountAvatar.textContent = (session?.user?.full_name || session?.user?.email || "W").trim().slice(0, 1).toUpperCase();
+  }
+
+  if (ui.accountAuthStatus) {
+    ui.accountAuthStatus.textContent = authStatusText;
+  }
+  if (ui.accountAuthHint) {
+    ui.accountAuthHint.textContent = state.accountNotice;
+  }
+  if (ui.authEmailInput) {
+    if (session?.user?.email) {
+      ui.authEmailInput.value = session.user.email;
+    } else if (!ui.authEmailInput.value) {
+      ui.authEmailInput.value = state.authEmailDraft || "";
+    }
+    ui.authEmailInput.disabled = state.accountBusy || Boolean(session);
+  }
+  if (ui.emailAuthButton) {
+    ui.emailAuthButton.disabled = state.accountBusy || !state.config.emailAuthEnabled || Boolean(session);
+    ui.emailAuthButton.textContent = state.config.emailAuthEnabled
+      ? langText("Отправить ссылку для входа", "Send sign-in link")
+      : langText("Email-вход скоро", "Email sign-in pending setup");
+  }
   if (ui.emailVerifyButton) {
     ui.emailVerifyButton.hidden = !state.config.emailVerificationEnabled || Boolean(session);
     ui.emailVerifyButton.disabled = state.accountBusy || Boolean(session);
     ui.emailVerifyButton.textContent = langText("Подтвердить email сначала", "Verify email first");
   }
-  ui.accountLogoutButton.hidden = !session;
-  ui.accountLogoutButton.disabled = state.accountBusy;
-  ui.accountSaveButton.disabled = state.accountBusy;
-  ui.accountSyncWalletButton.disabled = state.accountBusy || !state.walletAddress || linkedWallet === state.walletAddress;
-  ui.emailAuthButton.textContent = state.config.emailAuthEnabled
-    ? langText("Отправить ссылку для входа", "Send sign-in link")
-    : langText("Email-вход скоро", "Email sign-in pending setup");
-  ui.accountSaveButton.textContent = session
-    ? langText("Сохранить профиль", "Save profile")
-    : langText("Сохранить в этом браузере", "Save in this browser");
-  ui.accountSaveState.textContent = session
-    ? langText(
-        "После сохранения адрес доставки будет доступен из кабинета на других устройствах.",
-        "After saving, your delivery profile will be available from your account on other devices."
-      )
-    : langText(
-        "Без авторизации профиль хранится только локально в этом браузере.",
-        "Without sign-in, your profile is stored only locally in this browser."
-      );
-
-  if (linkedWallet) {
-    ui.walletStatus.textContent = shortAddress(linkedWallet);
+  if (ui.accountGate) {
+    ui.accountGate.hidden = Boolean(session);
+  }
+  if (ui.accountContent) {
+    ui.accountContent.hidden = !session;
+  }
+  if (ui.accountLoginButton) {
+    ui.accountLoginButton.hidden = Boolean(session);
+    ui.accountLoginButton.disabled = state.accountBusy;
+  }
+  if (ui.accountLogoutButton) {
+    ui.accountLogoutButton.hidden = !session;
+    ui.accountLogoutButton.disabled = state.accountBusy;
+  }
+  if (ui.accountSaveButton) {
+    ui.accountSaveButton.disabled = state.accountBusy || !session;
+    ui.accountSaveButton.textContent = langText("Сохранить профиль", "Save profile");
+  }
+  if (ui.accountSyncWalletButton) {
+    ui.accountSyncWalletButton.disabled = state.accountBusy || !session || !state.walletAddress || linkedWallet === state.walletAddress;
+  }
+  if (ui.accountSaveState) {
+    ui.accountSaveState.textContent = session
+      ? langText(
+          "После сохранения адрес доставки и кошелек будут доступны в кабинете на других устройствах.",
+          "After saving, your delivery profile and wallet will be available in the account on other devices."
+        )
+      : langText(
+          "Сначала войди через popup, затем кабинет разблокирует сохранение и историю.",
+          "Sign in through the popup first, then the account will unlock saving and history."
+        );
+  }
+  if (ui.walletStatus) {
+    ui.walletStatus.textContent = linkedWallet ? shortAddress(linkedWallet) : t("wallet_disconnected");
+  }
+  if (ui.authModal) {
+    ui.authModal.hidden = !state.authModalOpen;
+    ui.authModal.setAttribute("aria-hidden", state.authModalOpen ? "false" : "true");
   }
 }
 
@@ -1522,8 +1604,8 @@ function collectShipping() {
   if (!payload.full_name || !payload.phone || !payload.country || !payload.city || !payload.address_line1) {
     throw new Error(
       langText(
-        "Заполни обязательные поля адреса доставки на отдельной странице личного кабинета.",
-        "Fill in the required delivery fields on the separate account page before buying."
+        "Сначала войди через popup и заполни обязательные поля доставки на отдельной странице кабинета.",
+        "Sign in through the popup first and fill in the required delivery fields on the separate account page before buying."
       )
     );
   }
@@ -1577,28 +1659,30 @@ async function onWalletClick() {
 
 async function saveProfile() {
   persistProfileDraft();
+  if (!state.session) {
+    state.accountNotice = langText(
+      "Сначала войди через popup, чтобы сохранить профиль в кабинете.",
+      "Sign in through the popup first to save your profile in the account."
+    );
+    openAuthModal();
+    renderAll();
+    return;
+  }
   state.accountBusy = true;
   state.accountNotice = "";
   renderAccount();
 
   try {
     const payload = collectAccountProfilePayload();
-    if (state.session) {
-      const sessionPayload = await apiRequest("/account/profile", {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      state.session = sessionPayload.authenticated ? sessionPayload : null;
-      state.accountNotice = langText(
-        "Профиль сохранен в личном кабинете.",
-        "Profile saved to your account."
-      );
-    } else {
-      state.accountNotice = langText(
-        "Профиль сохранен только в этом браузере. Авторизуйся, чтобы синхронизировать его между устройствами.",
-        "Profile saved only in this browser. Sign in to sync it across devices."
-      );
-    }
+    const sessionPayload = await apiRequest("/account/profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    state.session = sessionPayload.authenticated ? sessionPayload : null;
+    state.accountNotice = langText(
+      "Профиль сохранен в личном кабинете.",
+      "Profile saved to your account."
+    );
     await refreshData();
   } catch (error) {
     state.accountNotice = langText(
@@ -1630,9 +1714,10 @@ async function syncWalletToAccount() {
   }
 
   state.accountNotice = langText(
-    "Кошелек привязан локально в этом браузере.",
-    "Wallet linked locally in this browser."
+    "Сначала войди через popup, затем кошелек можно будет сохранить в кабинете.",
+    "Sign in through the popup first, then you can save the wallet in your account."
   );
+  openAuthModal();
   renderAll();
 }
 
@@ -1643,8 +1728,8 @@ async function logoutAccount() {
     await apiRequest("/auth/logout", { method: "POST", body: JSON.stringify({}) });
     state.session = null;
     state.accountNotice = langText(
-      "Выход выполнен. Локальный черновик профиля сохранен в браузере.",
-      "Signed out. Your local profile draft remains in this browser."
+      "Выход выполнен. Чтобы снова открыть кабинет, войди через popup.",
+      "Signed out. Use the popup sign-in to open the account again."
     );
     renderAll();
   } catch (error) {
@@ -1821,8 +1906,13 @@ function setupProfileDraftListeners() {
 }
 
 function openAccountSection() {
+  if (!state.session) {
+    openAuthModal();
+    renderAccount();
+    return;
+  }
   if (currentPage !== "account" || !ui.accountSection) {
-    window.location.href = "/account";
+    window.location.href = "/account#account";
     return;
   }
   ui.accountSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1854,7 +1944,14 @@ async function bootstrap() {
   }
   if (ui.accountButton) {
     ui.accountButton.addEventListener("click", (event) => {
-      event.preventDefault();
+      if (!state.session || currentPage === "account") {
+        event.preventDefault();
+        openAccountSection();
+      }
+    });
+  }
+  if (ui.accountCtaButton) {
+    ui.accountCtaButton.addEventListener("click", () => {
       openAccountSection();
     });
   }
@@ -1885,6 +1982,30 @@ async function bootstrap() {
   if (ui.emailVerifyButton) {
     ui.emailVerifyButton.addEventListener("click", requestEmailVerification);
   }
+  if (ui.accountLoginButton) {
+    ui.accountLoginButton.addEventListener("click", () => {
+      openAuthModal();
+      renderAccount();
+    });
+  }
+  if (ui.authModalClose) {
+    ui.authModalClose.addEventListener("click", () => {
+      closeAuthModal();
+      renderAccount();
+    });
+  }
+  if (ui.authModalBackdrop) {
+    ui.authModalBackdrop.addEventListener("click", () => {
+      closeAuthModal();
+      renderAccount();
+    });
+  }
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.authModalOpen) {
+      closeAuthModal();
+      renderAccount();
+    }
+  });
   if (ui.accountSaveButton) {
     ui.accountSaveButton.addEventListener("click", saveProfile);
   }
@@ -1916,6 +2037,11 @@ async function bootstrap() {
   }
 
   consumeAuthQueryStatus();
+  if (state.session) {
+    closeAuthModal();
+  } else if (currentPage === "account") {
+    openAuthModal();
+  }
 
   try {
     await refreshData();
@@ -1928,6 +2054,7 @@ async function bootstrap() {
   if (window.location.hash === "#account") {
     openAccountSection();
   }
+  renderAll();
 }
 
 bootstrap();
