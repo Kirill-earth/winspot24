@@ -1752,7 +1752,7 @@ function setupProfileDraftListeners() {
 
 function openAccountSection() {
   if (currentPage !== "account" || !ui.accountSection) {
-    window.location.href = "./account.html";
+    window.location.href = "/account";
     return;
   }
   ui.accountSection.scrollIntoView({ behavior: "smooth", block: "start" });
