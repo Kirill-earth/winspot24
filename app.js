@@ -18,6 +18,7 @@ const DEFAULT_CONFIG = {
   walletRequired: true,
   shippingStartDate: "2026-03-11",
   emailAuthEnabled: false,
+  emailVerificationEnabled: false,
   googleClientId: "",
   googleAuthEnabled: false,
   appleAuthEnabled: false,
@@ -644,6 +645,7 @@ const ui = {
   accountAuthHint: document.getElementById("accountAuthHint"),
   authEmailInput: document.getElementById("authEmailInput"),
   emailAuthButton: document.getElementById("emailAuthButton"),
+  emailVerifyButton: document.getElementById("emailVerifyButton"),
   accountLogoutButton: document.getElementById("accountLogoutButton"),
   accountSaveButton: document.getElementById("accountSaveButton"),
   accountSaveState: document.getElementById("accountSaveState"),
@@ -930,6 +932,9 @@ function mergeBackendConfig(configPayload) {
     ),
     shippingStartDate: configPayload.shipping_start_date ?? state.config.shippingStartDate,
     emailAuthEnabled: Boolean(configPayload.email_auth_enabled ?? state.config.emailAuthEnabled),
+    emailVerificationEnabled: Boolean(
+      configPayload.email_verification_enabled ?? state.config.emailVerificationEnabled
+    ),
     googleClientId: configPayload.google_client_id ?? state.config.googleClientId,
     googleAuthEnabled: Boolean(configPayload.google_auth_enabled ?? state.config.googleAuthEnabled),
     appleAuthEnabled: Boolean(configPayload.apple_auth_enabled ?? state.config.appleAuthEnabled),
@@ -1295,9 +1300,64 @@ async function requestEmailMagicLink() {
       `A sign-in link was sent to ${response.email}. Check your inbox.`
     );
   } catch (error) {
+    const rawMessage = error.message || String(error);
+    if (/must be verified once/i.test(rawMessage)) {
+      state.accountNotice = langText(
+        "Этот email нужно один раз подтвердить через AWS. Нажми Verify email first, подтверди адрес в письме от AWS и потом снова запроси ссылку для входа.",
+        "This email must be verified once with AWS first. Use Verify email first, confirm the address from the AWS email, then request the sign-in link again."
+      );
+    } else {
+      state.accountNotice = langText(
+        `Не удалось отправить письмо: ${rawMessage}`,
+        `Could not send the email: ${rawMessage}`
+      );
+    }
+  } finally {
+    state.accountBusy = false;
+    renderAll();
+  }
+}
+
+async function requestEmailVerification() {
+  if (!ui.authEmailInput) {
+    return;
+  }
+  const email = ui.authEmailInput.value.trim().toLowerCase();
+  if (!email) {
     state.accountNotice = langText(
-      `Не удалось отправить письмо: ${error.message || String(error)}`,
-      `Could not send the email: ${error.message || String(error)}`
+      "Введи email, чтобы отправить письмо для подтверждения адреса.",
+      "Enter your email to send the address verification email."
+    );
+    renderAccount();
+    return;
+  }
+
+  state.accountBusy = true;
+  state.accountNotice = "";
+  state.authEmailDraft = email;
+  writeStorage(storageKeys.authEmailDraft, state.authEmailDraft);
+  renderAccount();
+
+  try {
+    const response = await apiRequest("/auth/email/verification/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    if (response.status === "verified") {
+      state.accountNotice = langText(
+        `Email ${response.email} уже подтвержден. Теперь можно запросить ссылку для входа.`,
+        `Email ${response.email} is already verified. You can request the sign-in link now.`
+      );
+    } else {
+      state.accountNotice = langText(
+        `Письмо для подтверждения отправлено на ${response.email}. Открой письмо от AWS, подтверди адрес и затем снова запроси ссылку для входа.`,
+        `A verification email was sent to ${response.email}. Open the AWS message, verify the address, then request the sign-in link again.`
+      );
+    }
+  } catch (error) {
+    state.accountNotice = langText(
+      `Не удалось отправить подтверждение email: ${error.message || String(error)}`,
+      `Could not send the email verification: ${error.message || String(error)}`
     );
   } finally {
     state.accountBusy = false;
@@ -1330,10 +1390,15 @@ function renderAccount() {
         `Signed in with ${providerLabel}. Your profile and shipping details can be stored in your account.`
       )
     : state.config.emailAuthEnabled
-      ? langText(
-        "Введи email и получи одноразовую ссылку. После перехода из письма вход выполнится без пароля.",
-        "Enter your email and get a one-time sign-in link. After opening it from your inbox, you will be signed in without a password."
-      )
+      ? state.config.emailVerificationEnabled
+        ? langText(
+          "Введи email. Если адрес новый, сначала подтверди его через AWS, затем запроси одноразовую ссылку для входа без пароля.",
+          "Enter your email. If the address is new, verify it once with AWS first, then request your one-time passwordless sign-in link."
+        )
+        : langText(
+          "Введи email и получи одноразовую ссылку. После перехода из письма вход выполнится без пароля.",
+          "Enter your email and get a one-time sign-in link. After opening it from your inbox, you will be signed in without a password."
+        )
       : langText(
         "Email-вход появится после настройки SMTP на backend. Пока профиль можно хранить только локально в этом браузере.",
         "Email sign-in will appear after SMTP is configured on the backend. Until then, your profile can only be stored locally in this browser."
@@ -1347,6 +1412,11 @@ function renderAccount() {
   }
   ui.authEmailInput.disabled = state.accountBusy || Boolean(session);
   ui.emailAuthButton.disabled = state.accountBusy || !state.config.emailAuthEnabled || Boolean(session);
+  if (ui.emailVerifyButton) {
+    ui.emailVerifyButton.hidden = !state.config.emailVerificationEnabled || Boolean(session);
+    ui.emailVerifyButton.disabled = state.accountBusy || Boolean(session);
+    ui.emailVerifyButton.textContent = langText("Подтвердить email сначала", "Verify email first");
+  }
   ui.accountLogoutButton.hidden = !session;
   ui.accountLogoutButton.disabled = state.accountBusy;
   ui.accountSaveButton.disabled = state.accountBusy;
@@ -1811,6 +1881,9 @@ async function bootstrap() {
   }
   if (ui.emailAuthButton) {
     ui.emailAuthButton.addEventListener("click", requestEmailMagicLink);
+  }
+  if (ui.emailVerifyButton) {
+    ui.emailVerifyButton.addEventListener("click", requestEmailVerification);
   }
   if (ui.accountSaveButton) {
     ui.accountSaveButton.addEventListener("click", saveProfile);
