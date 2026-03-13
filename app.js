@@ -597,6 +597,8 @@ const ui = {
   walletButton: document.getElementById("walletButton"),
   accountButton: document.getElementById("accountButton"),
   accountCtaButton: document.getElementById("accountCtaButton"),
+  headerAccountState: document.getElementById("headerAccountState"),
+  headerAccountStateText: document.getElementById("headerAccountStateText"),
   roundStatus: document.getElementById("roundStatus"),
   heroTitle: document.getElementById("heroTitle"),
   heroNote: document.getElementById("heroNote"),
@@ -639,6 +641,7 @@ const ui = {
   shippingPostalCode: document.getElementById("shippingPostalCode"),
   accountSection: document.getElementById("account"),
   accountGate: document.getElementById("accountGate"),
+  accountGateNotice: document.getElementById("accountGateNotice"),
   accountContent: document.getElementById("accountContent"),
   accountLoginButton: document.getElementById("accountLoginButton"),
   accountIdentity: document.getElementById("accountIdentity"),
@@ -1026,13 +1029,23 @@ function consumeAuthQueryStatus() {
   const url = new URL(window.location.href);
   const authState = url.searchParams.get("auth");
   if (!authState) {
-    return;
+    return null;
   }
+  const maskedEmail = url.searchParams.get("email");
 
   if (authState === "email-verified") {
     state.accountNotice = langText(
       "Вход по email подтвержден. Теперь профиль можно сохранять в личном кабинете.",
       "Email sign-in confirmed. You can now save your profile to your account."
+    );
+  } else if (authState === "email-sent") {
+    state.accountNotice = langText(
+      maskedEmail
+        ? `Magic link отправлен на ${maskedEmail}. Открой письмо и вернись в кабинет по ссылке.`
+        : "Magic link отправлен. Открой письмо и вернись в кабинет по ссылке.",
+      maskedEmail
+        ? `The magic link was sent to ${maskedEmail}. Open the email and return to the account from that link.`
+        : "The magic link was sent. Open the email and return to the account from that link."
     );
   } else if (authState === "email-invalid") {
     state.accountNotice = langText(
@@ -1042,8 +1055,10 @@ function consumeAuthQueryStatus() {
   }
 
   url.searchParams.delete("auth");
+  url.searchParams.delete("email");
   const cleaned = `${url.pathname}${url.search}${url.hash}`;
   window.history.replaceState({}, "", cleaned);
+  return authState;
 }
 
 async function loadSession() {
@@ -1080,6 +1095,20 @@ function closeAuthModal() {
   ui.authModal.hidden = true;
   ui.authModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("auth-modal-open");
+}
+
+function buildAccountUrl(authState = "", extraParams = {}) {
+  const target = new URL(`${window.location.origin}/account`);
+  if (authState) {
+    target.searchParams.set("auth", authState);
+  }
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value) {
+      target.searchParams.set(key, value);
+    }
+  });
+  target.hash = "account";
+  return target.toString();
 }
 
 async function refreshData() {
@@ -1333,6 +1362,8 @@ async function requestEmailMagicLink() {
       `Ссылка для входа отправлена на ${response.email}. Проверь почту.`,
       `A sign-in link was sent to ${response.email}. Check your inbox.`
     );
+    window.location.assign(buildAccountUrl("email-sent", { email: response.email }));
+    return;
   } catch (error) {
     const rawMessage = error.message || String(error);
     if (/must be verified once/i.test(rawMessage)) {
@@ -1432,6 +1463,13 @@ function renderAccount() {
       ? langText("Кабинет", "Account")
       : langText("Войти", "Sign in");
   }
+  if (ui.headerAccountState) {
+    ui.headerAccountState.classList.toggle("signed-in", Boolean(session));
+    ui.headerAccountState.setAttribute("aria-label", session ? "Signed in" : "Guest");
+  }
+  if (ui.headerAccountStateText) {
+    ui.headerAccountStateText.textContent = session ? "Signed in" : "Guest";
+  }
   if (ui.accountCtaButton) {
     ui.accountCtaButton.textContent = session
       ? langText("Открыть кабинет", "Open account")
@@ -1485,6 +1523,10 @@ function renderAccount() {
   }
   if (ui.accountGate) {
     ui.accountGate.hidden = Boolean(session);
+  }
+  if (ui.accountGateNotice) {
+    ui.accountGateNotice.textContent = session ? "" : state.accountNotice;
+    ui.accountGateNotice.hidden = Boolean(session) || !state.accountNotice;
   }
   if (ui.accountContent) {
     ui.accountContent.hidden = !session;
@@ -1955,6 +1997,11 @@ async function bootstrap() {
       openAccountSection();
     });
   }
+  if (ui.headerAccountState) {
+    ui.headerAccountState.addEventListener("click", () => {
+      openAccountSection();
+    });
+  }
   if (ui.purchaseForm) {
     ui.purchaseForm.addEventListener("submit", buyTickets);
   }
@@ -2036,10 +2083,10 @@ async function bootstrap() {
     );
   }
 
-  consumeAuthQueryStatus();
+  const authState = consumeAuthQueryStatus();
   if (state.session) {
     closeAuthModal();
-  } else if (currentPage === "account") {
+  } else if (currentPage === "account" && authState !== "email-sent") {
     openAuthModal();
   }
 
@@ -2052,7 +2099,13 @@ async function bootstrap() {
   }
 
   if (window.location.hash === "#account") {
-    openAccountSection();
+    if (currentPage === "account") {
+      if (state.session && ui.accountSection) {
+        ui.accountSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else {
+      openAccountSection();
+    }
   }
   renderAll();
 }

@@ -24,6 +24,10 @@
         <select id="languageSelect" class="language-select" aria-label="Language"></select>
         <button id="themeToggle" class="ghost-button theme-button" type="button">Dark Mode</button>
         <button id="walletButton" class="ghost-button" type="button">Connect Wallet</button>
+        <button id="headerAccountState" class="account-state-pill" type="button">
+          <span class="account-state-dot" aria-hidden="true"></span>
+          <span id="headerAccountStateText">Guest</span>
+        </button>
         <a id="accountButton" class="ghost-button" href="/account">Личный кабинет</a>
       </div>
     </header>
@@ -171,13 +175,29 @@
         <button id="authModalClose" class="ghost-button auth-modal-close" type="button" aria-label="Close login popup">
           Close
         </button>
-        <div class="auth-modal-copy">
-          <p class="eyebrow">ACCOUNT</p>
-          <h2 id="authModalTitle">Вход в личный кабинет</h2>
-          <p id="accountAuthStatus" class="panel-copy">
-            Введи email. Для нового адреса сначала отправим письмо подтверждения, затем magic link для входа.
-          </p>
-          <p id="accountAuthHint" class="hint secondary"></p>
+        <div class="auth-modal-hero">
+          <div class="auth-modal-copy">
+            <p class="eyebrow">PRIVATE ACCESS</p>
+            <h2 id="authModalTitle">Вход в личный кабинет</h2>
+            <p id="accountAuthStatus" class="panel-copy">
+              Введи email. Для нового адреса сначала отправим письмо подтверждения, затем magic link для входа.
+            </p>
+            <p id="accountAuthHint" class="hint secondary"></p>
+          </div>
+          <div class="auth-modal-visual" aria-hidden="true">
+            <span class="auth-modal-orb auth-modal-orb-primary"></span>
+            <span class="auth-modal-orb auth-modal-orb-secondary"></span>
+            <div class="auth-modal-glass">
+              <span class="auth-modal-glass-label">Winspot24 Account</span>
+              <strong>Passwordless</strong>
+              <span>Shipping, wallet, tickets.</span>
+            </div>
+          </div>
+        </div>
+        <div class="auth-modal-chips">
+          <span class="auth-modal-chip">Private</span>
+          <span class="auth-modal-chip">Apple-like</span>
+          <span class="auth-modal-chip">No password</span>
         </div>
         <label class="field-label auth-email-field auth-modal-field">
           <span>Email</span>

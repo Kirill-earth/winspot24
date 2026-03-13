@@ -168,6 +168,52 @@ a {
   flex-wrap: wrap;
 }
 
+.account-state-pill {
+  min-height: 42px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(17, 17, 17, 0.07);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(246, 247, 250, 0.88));
+  color: var(--text-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 10px 28px rgba(15, 18, 25, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.account-state-pill.signed-in {
+  color: var(--text);
+  border-color: rgba(13, 138, 79, 0.18);
+  background: linear-gradient(180deg, rgba(239, 252, 245, 0.96), rgba(230, 247, 238, 0.92));
+}
+
+.account-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(99, 102, 109, 0.55);
+  box-shadow: 0 0 0 4px rgba(99, 102, 109, 0.08);
+}
+
+.account-state-pill.signed-in .account-state-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgba(13, 138, 79, 0.14);
+}
+
+html[data-theme="dark"] .account-state-pill {
+  border-color: rgba(239, 244, 255, 0.08);
+  background: linear-gradient(180deg, rgba(30, 34, 42, 0.92), rgba(18, 21, 28, 0.92));
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .account-state-pill.signed-in {
+  border-color: rgba(72, 211, 129, 0.22);
+  background: linear-gradient(180deg, rgba(17, 45, 31, 0.94), rgba(12, 30, 23, 0.9));
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -197,6 +243,7 @@ a {
 
 .ghost-button,
 .primary-button,
+.account-state-pill,
 .qty-chip {
   border: 1px solid transparent;
   border-radius: 999px;
@@ -258,6 +305,7 @@ a {
 
 .ghost-button:hover:not(:disabled),
 .primary-button:hover:not(:disabled),
+.account-state-pill:hover:not(:disabled),
 .qty-chip:hover:not(:disabled) {
   transform: translateY(-1px);
 }
@@ -275,6 +323,7 @@ a {
 
 .primary-button:disabled,
 .qty-chip:disabled,
+.account-state-pill:disabled,
 .ghost-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -282,6 +331,7 @@ a {
 
 .language-select:focus,
 .ghost-button:focus,
+.account-state-pill:focus,
 .primary-button:focus,
 input[type="number"]:focus,
 .field-label input:focus {
@@ -705,11 +755,89 @@ html[data-theme="dark"] .official-material {
 .auth-modal-dialog {
   position: relative;
   z-index: 1;
-  width: min(560px, 100%);
+  width: min(680px, 100%);
   display: grid;
-  gap: 16px;
-  background: color-mix(in srgb, var(--surface-strong) 96%, transparent);
-  box-shadow: var(--shadow-main);
+  gap: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(255, 255, 255, 0.88), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 98%, transparent), color-mix(in srgb, var(--surface) 86%, transparent));
+  box-shadow: 0 30px 100px rgba(15, 18, 25, 0.22);
+}
+
+.auth-modal-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.78fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.auth-modal-visual {
+  position: relative;
+  min-height: 220px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background:
+    radial-gradient(120px 120px at 24% 26%, rgba(88, 154, 255, 0.36), transparent 70%),
+    radial-gradient(180px 180px at 78% 22%, rgba(255, 255, 255, 0.62), transparent 68%),
+    linear-gradient(160deg, rgba(247, 248, 251, 0.95), rgba(229, 234, 241, 0.78));
+  overflow: hidden;
+}
+
+.auth-modal-orb {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.auth-modal-orb-primary {
+  width: 172px;
+  height: 172px;
+  top: -18px;
+  right: -18px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.92), rgba(120, 176, 255, 0.88) 40%, rgba(33, 101, 190, 0.28) 78%);
+}
+
+.auth-modal-orb-secondary {
+  width: 132px;
+  height: 132px;
+  bottom: -26px;
+  left: -18px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.82), rgba(189, 205, 228, 0.76) 55%, rgba(100, 112, 128, 0.12) 78%);
+}
+
+.auth-modal-glass {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  padding: 18px;
+  display: grid;
+  gap: 6px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(245, 247, 250, 0.26));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 18px 38px rgba(15, 18, 25, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.auth-modal-glass strong {
+  font-size: 1.4rem;
+  letter-spacing: -0.04em;
+}
+
+.auth-modal-glass span:last-child {
+  color: rgba(17, 17, 17, 0.62);
+  font-size: 13px;
+}
+
+.auth-modal-glass-label {
+  color: rgba(17, 17, 17, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .auth-modal-copy h2 {
@@ -717,6 +845,48 @@ html[data-theme="dark"] .official-material {
   font-size: clamp(2rem, 5vw, 2.9rem);
   line-height: 0.98;
   letter-spacing: -0.05em;
+}
+
+.auth-modal-chips {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-modal-chip {
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+html[data-theme="dark"] .auth-modal-visual {
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    radial-gradient(120px 120px at 24% 26%, rgba(10, 132, 255, 0.28), transparent 70%),
+    radial-gradient(180px 180px at 78% 22%, rgba(255, 255, 255, 0.18), transparent 68%),
+    linear-gradient(160deg, rgba(30, 35, 44, 0.95), rgba(18, 22, 30, 0.88));
+}
+
+html[data-theme="dark"] .auth-modal-glass {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(26, 31, 39, 0.68), rgba(13, 16, 22, 0.36));
+}
+
+html[data-theme="dark"] .auth-modal-glass-label,
+html[data-theme="dark"] .auth-modal-glass span:last-child,
+html[data-theme="dark"] .auth-modal-chip {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .auth-modal-chip {
+  border-color: rgba(239, 244, 255, 0.08);
+  background: rgba(22, 26, 33, 0.72);
 }
 
 .auth-modal-field {
@@ -1093,6 +1263,7 @@ input[type="number"] {
   .status-pill,
   .language-select,
   .ghost-button,
+  .account-state-pill,
   .primary-button,
   input[type="number"] {
     width: 100%;
@@ -1112,6 +1283,14 @@ input[type="number"] {
   .social-button {
     min-width: 0;
     width: 100%;
+  }
+
+  .auth-modal-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-modal-visual {
+    min-height: 180px;
   }
 
   .account-cta-actions {
