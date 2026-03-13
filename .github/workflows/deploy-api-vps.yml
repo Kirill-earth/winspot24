@@ -205,6 +205,14 @@ jobs:
           cd "${VPS_PATH}/deploy/api"
           mkdir -p ../../backend/data
           $SUDO docker compose down --remove-orphans >/dev/null 2>&1 || true
+          OLD_API_CONTAINERS=$($SUDO docker ps -aq --filter "name=winspot24-api")
+          if [[ -n "${OLD_API_CONTAINERS}" ]]; then
+            $SUDO docker rm -f ${OLD_API_CONTAINERS} >/dev/null 2>&1 || true
+          fi
+          OLD_CADDY_CONTAINERS=$($SUDO docker ps -aq --filter "name=winspot24-api-caddy")
+          if [[ -n "${OLD_CADDY_CONTAINERS}" ]]; then
+            $SUDO docker rm -f ${OLD_CADDY_CONTAINERS} >/dev/null 2>&1 || true
+          fi
           $SUDO docker rm -f winspot24-api winspot24-api-caddy >/dev/null 2>&1 || true
           $SUDO docker compose up -d --build --remove-orphans --force-recreate
           $SUDO docker compose ps
