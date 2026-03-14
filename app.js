@@ -891,7 +891,10 @@ function resolveInitialLanguage() {
 function applyTheme() {
   document.documentElement.setAttribute("data-theme", state.theme);
   if (ui.themeToggle) {
-    ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+    const nextThemeLabel = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+    ui.themeToggle.classList.toggle("is-dark", state.theme === "dark");
+    ui.themeToggle.setAttribute("aria-label", nextThemeLabel);
+    ui.themeToggle.setAttribute("title", nextThemeLabel);
   }
 }
 
@@ -905,7 +908,10 @@ function applyStaticTranslations() {
     }
   });
   if (ui.themeToggle) {
-    ui.themeToggle.textContent = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+    const nextThemeLabel = state.theme === "dark" ? t("theme_light") : t("theme_dark");
+    ui.themeToggle.classList.toggle("is-dark", state.theme === "dark");
+    ui.themeToggle.setAttribute("aria-label", nextThemeLabel);
+    ui.themeToggle.setAttribute("title", nextThemeLabel);
   }
 }
 
@@ -918,6 +924,7 @@ function populateLanguageSelect() {
     const option = document.createElement("option");
     option.value = item.code;
     option.textContent = item.label;
+    option.title = item.label;
     ui.languageSelect.appendChild(option);
   });
   ui.languageSelect.value = state.language;
@@ -1740,12 +1747,16 @@ async function saveProfile() {
 
 async function syncWalletToAccount() {
   if (!state.walletAddress) {
-    state.accountNotice = langText(
-      "Сначала подключи кошелек.",
-      "Connect a wallet first."
-    );
-    renderAll();
-    return;
+    try {
+      await connectWallet();
+    } catch (error) {
+      state.accountNotice = langText(
+        `Не удалось подключить кошелек: ${error.message || String(error)}`,
+        `Could not connect the wallet: ${error.message || String(error)}`
+      );
+      renderAll();
+      return;
+    }
   }
 
   state.profileDraft.wallet_address = state.walletAddress;
@@ -1793,8 +1804,12 @@ async function buyTickets(event) {
   }
 
   if (state.config.walletRequired && !state.walletAddress) {
-    setDrawMessage(message("msg_wallet_required"), "alert");
-    return;
+    try {
+      await connectWallet();
+    } catch (error) {
+      setDrawMessage(message("msg_error_prefix", { message: error.message || String(error) }), "alert");
+      return;
+    }
   }
   if (!state.round || state.round.state !== "open") {
     setDrawMessage(message("msg_no_tickets_left"), "alert");

@@ -20,13 +20,17 @@
         <span class="logo-text">winspot24</span>
       </a>
       <div class="header-actions">
-        <span id="roundStatus" class="status-pill visually-hidden" data-i18n="status_open">Раунд открыт</span>
-        <select id="languageSelect" class="language-select" aria-label="Language"></select>
-        <button id="themeToggle" class="ghost-button theme-button" type="button">Dark Mode</button>
-        <button id="walletButton" class="ghost-button" type="button">Connect Wallet</button>
-        <button id="headerAccountState" class="account-state-pill" type="button">
-          <span class="account-state-dot" aria-hidden="true"></span>
-          <span id="headerAccountStateText">Guest</span>
+        <label class="language-pill" aria-label="Language">
+          <span class="language-pill-label">Lang</span>
+          <select id="languageSelect" class="language-select" aria-label="Language"></select>
+          <span class="language-pill-caret" aria-hidden="true"></span>
+        </label>
+        <button id="themeToggle" class="theme-toggle" type="button" aria-label="Dark Mode" title="Dark Mode">
+          <span class="theme-toggle-icon" aria-hidden="true">☀</span>
+          <span class="theme-toggle-switch" aria-hidden="true">
+            <span class="theme-toggle-thumb"></span>
+          </span>
+          <span class="theme-toggle-icon" aria-hidden="true">☾</span>
         </button>
         <a id="accountButton" class="ghost-button" href="/account">Личный кабинет</a>
       </div>
